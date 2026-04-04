@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color: #132238;
+    background: #f6fbff;
+    font-family: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
+  }
+
+  body {
+    @apply min-h-screen bg-hero-wash text-ink;
+  }
+
+  #app {
+    @apply min-h-screen;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-3xl border border-slate-200/80 bg-white/85 shadow-panel backdrop-blur;
+  }
+
+  .panel-title {
+    @apply text-lg font-semibold text-ink;
+  }
+
+  .muted-copy {
+    @apply text-sm leading-6 text-slate-600;
+  }
+
+  .field-label {
+    @apply mb-2 block text-sm font-medium text-slate-700;
+  }
+
+  .field-input {
+    @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
+  }
+}
