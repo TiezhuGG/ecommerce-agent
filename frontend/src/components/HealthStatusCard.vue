@@ -18,8 +18,8 @@ defineProps<{
         </p>
         <h2 class="mt-3 text-2xl font-semibold text-ink">基础后端已接入</h2>
         <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-          这个区域的作用是验证前端页面已经能够访问 FastAPI 服务。后续真实的商品搜索、FAQ
-          和 Agent 接口都会在同一套前后端联通链路上迭代。
+          这个区域只负责验证前后端链路是否通畅。你可以把它理解成整个项目的基础设施探针：
+          `/health` 正常，说明前端至少能访问 FastAPI；后续搜索、FAQ、Agent 接口都会复用同一条链路。
         </p>
       </div>
 

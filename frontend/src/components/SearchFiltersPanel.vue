@@ -26,7 +26,8 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
       <div>
         <h2 class="panel-title">结构化商品搜索</h2>
         <p class="muted-copy mt-2">
-          这一块对应未来的后端商品搜索接口。现在先用静态数据把筛选条件、结果联动和页面结构跑通。
+          这一块现在已经开始对接真实后端接口。你在这里输入的条件，会被转换成查询参数发送给
+          FastAPI 的商品搜索接口，而不是继续在前端本地过滤静态数组。
         </p>
       </div>
       <button
@@ -45,7 +46,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
           :value="filters.keyword"
           type="text"
           class="field-input"
-          placeholder="例如：静音键盘、通勤耳机"
+          placeholder="例如：降噪耳机、4K 显示器、办公键盘"
           @input="updateField('keyword', ($event.target as HTMLInputElement).value)"
         />
       </label>
@@ -85,7 +86,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
           type="number"
           min="0"
           class="field-input"
-          placeholder="例如：500"
+          placeholder="例如：1500"
           @input="
             updateField(
               'maxPrice',

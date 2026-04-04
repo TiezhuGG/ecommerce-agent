@@ -11,7 +11,7 @@ const emit = defineEmits<{
   submit: [query: string];
 }>();
 
-const prompt = ref("帮我找 500 元以内、适合通勤和开会的蓝牙耳机，优先考虑续航和佩戴舒适。");
+const prompt = ref("帮我找 2000 元以内、适合通勤和开会的蓝牙耳机，优先考虑降噪和佩戴舒适。");
 
 function submitPrompt() {
   emit("submit", prompt.value.trim());
@@ -22,15 +22,15 @@ function submitPrompt() {
   <section class="panel p-6">
     <h2 class="panel-title">智能导购入口</h2>
     <p class="muted-copy mt-2">
-      未来这里会接 LangGraph。当前先用前端演示版模拟“自然语言输入 -> 条件解析 ->
-      推荐摘要”的链路，让你先看懂业务流。
+      这里还没有接入 LangGraph，当前只是演示版入口。它会读取当前页面里的商品结果，模拟“自然语言需求
+      -> 推荐摘要”的效果，帮助你先理解 Agent 未来要接管的业务位置。
     </p>
 
     <textarea
       v-model="prompt"
       rows="5"
       class="field-input mt-6 resize-none"
-      placeholder="例如：我想买 300 到 500 元的机械键盘，主要办公用，希望尽量安静。"
+      placeholder="例如：我想买一款 2000 元以内的降噪耳机，通勤和视频会议都要用。"
     />
 
     <div class="mt-4 flex flex-wrap gap-3">
@@ -41,7 +41,7 @@ function submitPrompt() {
       >
         生成导购建议
       </button>
-      <span class="chip bg-amber-100 text-amber-800">当前为前端演示模式</span>
+      <span class="chip bg-amber-100 text-amber-800">当前仍为前端演示逻辑</span>
     </div>
 
     <div v-if="result" class="mt-6 rounded-3xl bg-slate-50 p-5">

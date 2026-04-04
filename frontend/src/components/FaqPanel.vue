@@ -14,7 +14,8 @@ const activeId = ref(props.entries[0]?.id ?? "");
   <section class="panel p-6">
     <h2 class="panel-title">售前 FAQ 区</h2>
     <p class="muted-copy mt-2">
-      FAQ 代表未来的售前知识模块。当前先用静态条目模拟“问题命中 -> 返回答案 -> 展示来源”的交互。
+      FAQ 仍保留静态演示数据。这样你可以直观看到：这轮已经迁到后端的是商品搜索，而 FAQ
+      还没有迁移，下一轮会继续推进这块。
     </p>
 
     <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">

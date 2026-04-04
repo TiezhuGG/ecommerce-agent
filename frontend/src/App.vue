@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
+import { fetchProducts } from "./api/products";
 import AgentPromptPanel from "./components/AgentPromptPanel.vue";
 import ComparePanel from "./components/ComparePanel.vue";
 import FaqPanel from "./components/FaqPanel.vue";
 import HealthStatusCard from "./components/HealthStatusCard.vue";
 import ProductGrid from "./components/ProductGrid.vue";
 import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
-import { mockFaqEntries, mockProducts } from "./data/mockCatalog";
+import { mockFaqEntries } from "./data/mockFaqEntries";
 import type { AgentResult, HealthResponse, Product, SearchFilters } from "./types";
 
 const apiBaseUrl = "http://127.0.0.1:8000";
@@ -23,33 +24,18 @@ const filters = ref<SearchFilters>({
   maxPrice: null,
 });
 
+const products = ref<Product[]>([]);
+const productsLoading = ref(false);
+const productsErrorMessage = ref("");
+const appliedFilters = ref<string[]>([]);
+const availableCategories = ref<string[]>([]);
+const availableBrands = ref<string[]>([]);
+
 const selectedProductIds = ref<string[]>([]);
 const agentResult = ref<AgentResult | null>(null);
 
-const categories = [...new Set(mockProducts.map((product) => product.category))];
-const brands = [...new Set(mockProducts.map((product) => product.brand))];
-
-const filteredProducts = computed(() =>
-  mockProducts.filter((product) => {
-    const keyword = filters.value.keyword.trim().toLowerCase();
-    const matchesKeyword =
-      !keyword ||
-      product.name.toLowerCase().includes(keyword) ||
-      product.summary.toLowerCase().includes(keyword) ||
-      product.tags.some((tag) => tag.toLowerCase().includes(keyword));
-
-    const matchesCategory =
-      !filters.value.category || product.category === filters.value.category;
-    const matchesBrand = !filters.value.brand || product.brand === filters.value.brand;
-    const matchesPrice =
-      filters.value.maxPrice === null || product.price <= filters.value.maxPrice;
-
-    return matchesKeyword && matchesCategory && matchesBrand && matchesPrice;
-  }),
-);
-
 const selectedProducts = computed(() =>
-  mockProducts.filter((product) => selectedProductIds.value.includes(product.id)),
+  products.value.filter((product) => selectedProductIds.value.includes(product.id)),
 );
 
 async function loadHealth() {
@@ -69,6 +55,30 @@ async function loadHealth() {
       error instanceof Error ? error.message : "未知错误，无法访问后端";
   } finally {
     healthLoading.value = false;
+  }
+}
+
+async function loadProducts() {
+  productsLoading.value = true;
+  productsErrorMessage.value = "";
+
+  try {
+    const result = await fetchProducts(filters.value);
+    products.value = result.items;
+    appliedFilters.value = result.applied_filters;
+    availableCategories.value = result.available_categories;
+    availableBrands.value = result.available_brands;
+
+    // When the result set changes, keep only compare selections that still exist
+    // in the latest backend response. This avoids stale selection state.
+    const currentIds = new Set(result.items.map((item) => item.id));
+    selectedProductIds.value = selectedProductIds.value.filter((id) => currentIds.has(id));
+  } catch (error) {
+    products.value = [];
+    productsErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法加载商品列表";
+  } finally {
+    productsLoading.value = false;
   }
 }
 
@@ -99,7 +109,7 @@ function toggleCompare(productId: string) {
   selectedProductIds.value = [...selectedProductIds.value, productId];
 }
 
-function buildAgentResult(query: string, products: Product[]): AgentResult {
+function buildAgentResult(query: string, visibleProducts: Product[]): AgentResult {
   const lowerQuery = query.toLowerCase();
   const inferredFilters: string[] = [];
 
@@ -108,6 +118,12 @@ function buildAgentResult(query: string, products: Product[]): AgentResult {
   }
   if (lowerQuery.includes("键盘")) {
     inferredFilters.push("分类：机械键盘");
+  }
+  if (lowerQuery.includes("显示器")) {
+    inferredFilters.push("分类：显示器");
+  }
+  if (lowerQuery.includes("鼠标")) {
+    inferredFilters.push("分类：鼠标");
   }
   if (lowerQuery.includes("通勤")) {
     inferredFilters.push("场景：通勤");
@@ -121,24 +137,26 @@ function buildAgentResult(query: string, products: Product[]): AgentResult {
     inferredFilters.push(`预算上限：¥${priceMatch[1]}`);
   }
 
-  const topProducts = products.slice(0, 2).map((product) => product.name);
+  const topProducts = visibleProducts.slice(0, 2).map((product) => product.name);
   const title = topProducts.length
     ? `已为你锁定 ${topProducts.length} 个重点候选商品`
-    : "未找到理想商品，建议放宽预算或关键词";
+    : "当前条件下没有理想候选商品";
 
   const answer = topProducts.length
-    ? `结合你的需求，我优先保留了 ${topProducts.join("、")}。当前演示版会根据输入里的预算、品类和场景词做简单匹配，后续接入 LangGraph 后，会把这一步升级为真正的多节点导购工作流。`
-    : "当前筛选条件下没有匹配商品。后续真实版本会加入更细的补充提问和替代推荐逻辑。";
+    ? `结合当前检索结果，我优先建议你关注 ${topProducts.join("、")}。注意这里的推荐仍然是前端演示逻辑，但它已经建立在真实后端商品检索结果之上，后续接入 LangGraph 后，这里会升级为“先检索，再推理，再生成解释”的正式工作流。`
+    : "当前商品检索没有命中结果。后续接入 Agent 后，这里会增加补充提问和替代推荐逻辑。";
 
   return {
     title,
     parsedIntent: "搜索导购",
-    appliedFilters: inferredFilters.length ? inferredFilters : ["未识别到明确条件，按默认候选商品展示"],
+    appliedFilters: inferredFilters.length
+      ? inferredFilters
+      : ["未识别到明确条件，先参考当前可见商品结果"],
     answer,
     executionSteps: [
-      "第 1 步：识别用户输入中的预算、品类和场景关键词",
-      "第 2 步：根据条件筛选静态商品样本",
-      "第 3 步：汇总候选商品并生成推荐摘要",
+      "第 1 步：根据自然语言识别预算、品类和场景关键词",
+      "第 2 步：结合当前后端商品搜索结果筛出候选集",
+      "第 3 步：生成面向用户的推荐摘要与解释",
     ],
   };
 }
@@ -148,26 +166,31 @@ function runAgentPrompt(query: string) {
     return;
   }
 
-  const lowerQuery = query.toLowerCase();
-  const matchedProducts = mockProducts.filter((product) => {
-    if (lowerQuery.includes("耳机") && product.category === "蓝牙耳机") {
-      return true;
-    }
-    if (lowerQuery.includes("键盘") && product.category === "机械键盘") {
-      return true;
-    }
-    if (lowerQuery.includes("显示器") && product.category === "显示器") {
-      return true;
-    }
-    return lowerQuery.includes(product.brand.toLowerCase());
-  });
-
-  const candidateProducts = matchedProducts.length ? matchedProducts : filteredProducts.value;
-  agentResult.value = buildAgentResult(query, candidateProducts);
+  agentResult.value = buildAgentResult(query, products.value);
 }
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  filters,
+  () => {
+    // A tiny debounce keeps the UI responsive while preventing a request on
+    // every single keystroke. This is a common pattern before introducing a
+    // more advanced data-fetching layer.
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+    }
+
+    searchTimer = setTimeout(() => {
+      void loadProducts();
+    }, 250);
+  },
+  { deep: true },
+);
 
 onMounted(() => {
   void loadHealth();
+  void loadProducts();
 });
 </script>
 
@@ -177,34 +200,35 @@ onMounted(() => {
       <div class="grid gap-8 px-6 py-8 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-10">
         <div>
           <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700">
-            电商导购 Agent · 第一版骨架
+            电商导购 Agent · 第二轮迭代
           </p>
           <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-            中文化、响应式、可持续迭代的 AI 导购项目基座
+            先把商品搜索做成真实后端能力，再逐步接上 AI 工作流
           </h1>
           <p class="mt-5 max-w-3xl text-base leading-8 text-slate-600">
-            这一版的重点不是直接把所有能力做完，而是先把页面结构、业务模块和技术边界搭清楚。你现在看到的搜索区、导购区、对比区和
-            FAQ 区，都是后续真实后端接口和 LangGraph 工作流的承载位置。
+            这轮的核心变化是：商品结果已经不再依赖前端静态筛选，而是改为请求 FastAPI
+            的真实接口。后面无论是 FAQ、对比分析，还是 LangGraph 推荐工作流，都会沿着这条“前端发请求
+            -> 后端提供业务工具 -> AI 只做理解与编排”的路线继续演进。
           </p>
 
           <div class="mt-6 flex flex-wrap gap-3">
-            <span class="chip bg-amber-100 text-amber-800">Vue 3</span>
-            <span class="chip bg-sky-100 text-sky-800">Tailwind CSS</span>
-            <span class="chip bg-emerald-100 text-emerald-800">FastAPI</span>
+            <span class="chip bg-amber-100 text-amber-800">真实品牌与型号</span>
+            <span class="chip bg-sky-100 text-sky-800">后端商品搜索接口</span>
+            <span class="chip bg-emerald-100 text-emerald-800">中文响应式页面</span>
             <span class="chip bg-violet-100 text-violet-800">LangGraph 预留</span>
           </div>
         </div>
 
         <div class="rounded-[28px] bg-ink p-6 text-white">
           <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-300">
-            第一版模块清单
+            第二轮重点
           </p>
           <ul class="mt-5 space-y-4 text-sm leading-7 text-slate-200">
-            <li>1. 结构化搜索区：未来承接商品搜索接口</li>
-            <li>2. 智能导购区：未来承接 LangGraph 主工作流</li>
-            <li>3. 商品结果区：展示搜索结果与推荐候选</li>
-            <li>4. 商品对比区：展示多商品差异分析</li>
-            <li>5. FAQ 区：展示售前知识条目与答案来源</li>
+            <li>1. 商品数据迁到后端，作为真实业务检索工具</li>
+            <li>2. 前端筛选条件映射为 HTTP 查询参数</li>
+            <li>3. 商品结果区消费后端接口返回结果</li>
+            <li>4. FAQ 与导购区暂时保留演示逻辑，不混在本轮一起做</li>
+            <li>5. 每一轮新增一份 docs 复盘文档，方便后面系统回顾</li>
           </ul>
         </div>
       </div>
@@ -220,8 +244,8 @@ onMounted(() => {
     <section class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
       <SearchFiltersPanel
         :filters="filters"
-        :categories="categories"
-        :brands="brands"
+        :categories="availableCategories"
+        :brands="availableBrands"
         @update="updateFilters"
         @reset="resetFilters"
       />
@@ -230,8 +254,11 @@ onMounted(() => {
 
     <section class="grid gap-6 2xl:grid-cols-[1.1fr_0.9fr]">
       <ProductGrid
-        :products="filteredProducts"
+        :products="products"
         :selected-ids="selectedProductIds"
+        :loading="productsLoading"
+        :error-message="productsErrorMessage"
+        :applied-filters="appliedFilters"
         @toggle-compare="toggleCompare"
       />
       <ComparePanel :selected-products="selectedProducts" />
