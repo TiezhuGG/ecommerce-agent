@@ -3,12 +3,7 @@ from app.schemas.products import ProductSearchResponse, ProductSummary
 
 
 def _matches_keyword(product: ProductSummary, keyword: str) -> bool:
-    """执行最小可解释的关键词匹配。
-
-    当前阶段先不接入向量检索，也不让 LLM 直接负责商品事实搜索，
-    而是保留一个稳定、可预测、可复用的业务检索工具。
-    后续无论是 LangChain 还是 LangGraph，本质上都应该调用这类工具。
-    """
+    """执行最小可解释的关键词匹配。"""
 
     normalized = keyword.strip().lower()
     if not normalized:
@@ -52,7 +47,7 @@ def search_products(
     if brand:
         applied_filters.append(f"品牌：{brand}")
     if max_price is not None:
-        applied_filters.append(f"预算上限：¥{max_price}")
+        applied_filters.append(f"预算上限：￥{max_price}")
 
     return ProductSearchResponse(
         items=matched_items,

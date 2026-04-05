@@ -13,17 +13,13 @@ class FaqEntry(BaseModel):
 
 
 class FaqAskRequest(BaseModel):
-    """FAQ 问答接口请求。"""
+    """FAQ 查询请求。"""
 
     question: str = Field(..., min_length=1, description="用户输入的售前问题。")
 
 
 class FaqAskResponse(BaseModel):
-    """FAQ 问答接口响应。
-
-    这里不仅返回答案，还返回命中的条目和来源标签，
-    方便前端展示，也方便后续 Agent 拼接引用依据。
-    """
+    """FAQ 查询响应。"""
 
     question: str
     answer: str

@@ -1,7 +1,7 @@
 from app.schemas.products import ProductSummary
 
 
-# 这里先把商品目录写在代码里，是为了让你把“业务数据结构”和“搜索接口边界”先学清楚。
+# 这里先把商品目录写在代码里，是为了让你先把“业务数据结构”和“搜索接口边界”学清楚。
 # 后面如果接数据库、向量库或第三方商品接口，只需要替换数据来源，不需要推翻整个接口设计。
 # 所有商品都使用真实存在的品牌和型号，但价格仅为演示参考价，不代表实时电商价格。
 PRODUCT_CATALOG: list[ProductSummary] = [
@@ -12,7 +12,7 @@ PRODUCT_CATALOG: list[ProductSummary] = [
         brand="Sony",
         price=1599,
         price_note="演示参考价，非实时电商价格",
-        summary="旗舰真无线降噪耳机，适合通勤、开会和日常高频佩戴。",
+        summary="旗舰真无线降噪耳机，适合通勤、开会和高频日常佩戴。",
         scenario="通勤 / 办公 / 降噪",
         tags=["旗舰", "降噪", "通勤", "高音质"],
         specs=["主动降噪", "多设备切换", "轻量化机身"],

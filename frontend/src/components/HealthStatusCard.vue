@@ -18,8 +18,9 @@ defineProps<{
         </p>
         <h2 class="mt-3 text-2xl font-semibold text-ink">基础后端已接通</h2>
         <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-          这个模块只负责验证前端是否能正常访问 FastAPI。后续商品搜索、FAQ、对比分析和 Agent 工作流
-          都会复用同一套前后端通信基础，所以这里相当于整个项目的“系统体检入口”。
+          这个模块只负责验证前端是否能正常访问 FastAPI。
+          后续商品搜索、FAQ、对比分析和 Agent 工作流都会复用同一套前后端通信基础，
+          所以这里相当于整个项目的“系统体检入口”。
         </p>
       </div>
 

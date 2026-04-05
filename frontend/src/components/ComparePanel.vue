@@ -17,7 +17,7 @@ defineProps<{
         <h2 class="panel-title">商品对比区</h2>
         <p class="muted-copy mt-2">
           这里已经接入真实后端接口。它和商品搜索、FAQ 一样，都是后续 Agent 可以直接复用的业务工具。
-          当前对比结论仍然由后端规则逻辑生成，还没有交给模型总结。
+          当前对比结论仍然由后端规则生成，还没有把总结能力完全交给模型。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">已选 {{ selectedProducts.length }} 件</span>
@@ -29,9 +29,9 @@ defineProps<{
         :key="product.id"
         class="rounded-3xl bg-slate-50 p-5"
       >
-        <p class="text-sm text-slate-500">{{ product.brand }} · {{ product.category }}</p>
+        <p class="text-sm text-slate-500">{{ product.brand }} / {{ product.category }}</p>
         <h3 class="mt-2 text-base font-semibold text-slate-900">{{ product.name }}</h3>
-        <p class="mt-3 text-2xl font-semibold text-slate-900">¥{{ product.price }}</p>
+        <p class="mt-3 text-2xl font-semibold text-slate-900">￥{{ product.price }}</p>
         <ul class="mt-4 space-y-2 text-sm text-slate-600">
           <li v-for="spec in product.specs" :key="spec">- {{ spec }}</li>
         </ul>
@@ -41,7 +41,7 @@ defineProps<{
         v-if="selectedProducts.length === 0"
         class="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600 lg:col-span-3"
       >
-        先从商品列表中选择要比较的商品。
+        先从商品列表里选择要比较的商品。
       </div>
     </div>
 

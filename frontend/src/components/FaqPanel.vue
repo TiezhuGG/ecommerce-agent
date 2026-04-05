@@ -62,7 +62,7 @@ function submitFaq() {
           v-model="question"
           rows="4"
           class="field-input resize-none"
-          placeholder="例如：耳机进水还能保修吗？"
+          placeholder="例如：耳机进水后还能保修吗？"
         />
 
         <button

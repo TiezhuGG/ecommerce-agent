@@ -17,9 +17,9 @@ def compare_products(product_ids: list[str]) -> CompareResponse:
     price_gap = expensive.price - cheapest.price
 
     highlights = [
-        f"价格最低的是 {cheapest.name}，参考价为 ¥{cheapest.price}",
-        f"价格最高的是 {expensive.name}，参考价为 ¥{expensive.price}",
-        f"当前对比商品的价格跨度为 ¥{price_gap}",
+        f"价格最低的是 {cheapest.name}，参考价为 ￥{cheapest.price}",
+        f"价格最高的是 {expensive.name}，参考价为 ￥{expensive.price}",
+        f"当前对比商品的价格跨度为 ￥{price_gap}",
     ]
 
     scenarios = "、".join(dict.fromkeys(product.scenario for product in compared_products))

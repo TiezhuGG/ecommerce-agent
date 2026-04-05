@@ -27,7 +27,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
         <h2 class="panel-title">结构化商品搜索</h2>
         <p class="muted-copy mt-2">
           这个模块负责收集结构化筛选条件。它本身不直接请求后端，而是把筛选状态交给页面总控，
-          由页面决定什么时候触发商品搜索。这样组件职责会更清晰，也更适合后续 Agent 回填条件。
+          由页面决定什么时候触发商品搜索。这种拆分方式更利于后续 Agent 回填条件，也更贴近企业里的状态分层。
         </p>
       </div>
       <button

@@ -36,7 +36,7 @@ def ask_faq(question: str) -> FaqAskResponse:
     if not best_entry or best_score == 0:
         return FaqAskResponse(
             question=question,
-            answer="当前没有直接命中的 FAQ 条目。后续我们会把这块升级成更强的检索或 Agent 问答能力。",
+            answer="当前没有直接命中的 FAQ 条目。后续我们会把这一块升级成知识库检索或更完整的 Agent 问答。",
             matched_entry=None,
             source_label="FAQ 占位回复",
             suggestions=[entry.question for entry in FAQ_ENTRIES[:3]],

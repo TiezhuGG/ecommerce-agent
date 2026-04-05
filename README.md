@@ -1,48 +1,40 @@
 # 电商导购 Agent
 
-这是一个以教学驱动方式推进的电商导购 Agent 项目，目标是帮助你在真实编码过程中学习以下能力：
+这是一个以“教学优先、逐轮迭代”为目标推进的电商导购 Agent 项目，目标是让你在真实编码过程中逐步掌握下面几类能力：
 
-- Vue 3 前端界面与业务模块拆分
-- FastAPI 后端接口设计
-- 基于 LangGraph 的 Agent 工作流
-- 电商导购、售前 FAQ、商品对比等真实业务场景建模
+- Vue 3 + TailwindCSS 前端页面拆分与状态管理
+- FastAPI 后端接口设计与服务分层
+- 基于兼容 OpenAI 协议模型的 LLM 调用封装
+- 基于 LangGraph 的单 Agent 编排
+- 电商导购、FAQ、商品对比这类真实业务工具的组合方式
 
 ## 当前阶段
 
-当前完成的是第一轮迭代的基础版本：
+当前已经完成到第八轮迭代，核心能力包括：
 
-- 后端提供基础健康检查接口
-- 前端已切换为中文界面
-- 前端已接入 Tailwind CSS
-- 首页已重构为响应式的电商导购 Agent 展示骨架
-- 页面包含搜索区、智能导购区、商品列表区、对比区、FAQ 区
-- 搜索、对比、FAQ 目前使用前端静态示例数据，用于先跑通页面和业务结构
+- `/products` 商品搜索工具
+- `/faq/ask` 售前 FAQ 工具
+- `/compare` 商品对比工具
+- `/intent/parse` 意图解析工具
+- `/agent/precheck` Agent 运行预检
+- `/agent/chat` LangGraph 单 Agent 对话入口
+
+前端当前已经升级成统一的 Agent 工作台，能直接展示：
+
+- Agent 路由结果
+- 最终回答
+- 解析出的意图条件
+- 工具调用轨迹
+- 预检结果与风险提示
 
 ## 项目结构
 
 - `backend/`
-  - FastAPI 服务
-  - 当前提供 `/health` 健康检查接口
+  FastAPI 服务，包含商品、FAQ、对比、意图解析和 Agent 编排能力
 - `frontend/`
-  - Vue 3 + Vite + Tailwind CSS 前端
-  - 当前主要用于展示第一版页面骨架和交互结构
+  Vue 3 + Vite + TailwindCSS 前端，负责展示商品搜索、FAQ、对比区和 Agent 工作台
 - `docs/`
-  - 项目架构、业务设计、接口规划和迭代说明
-
-## 当前页面包含什么
-
-首页现在不是最终功能页，而是第一版业务壳子。它的作用是把后续要做的核心模块先搭出来：
-
-- 搜索筛选区
-  - 对应未来的结构化商品搜索
-- 智能导购区
-  - 对应未来的 LangGraph 推荐工作流入口
-- 商品结果区
-  - 对应未来的商品检索和推荐结果展示
-- 对比分析区
-  - 对应未来的商品对比接口
-- FAQ 区
-  - 对应未来的售前知识库问答
+  每一轮迭代文档、架构说明和复盘记录
 
 ## 如何启动后端
 
@@ -52,7 +44,10 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-如果你习惯使用虚拟环境，也可以先创建并激活虚拟环境，再安装依赖。
+如果你使用虚拟环境，请先激活已有的 `.venv`，不要重复创建多个环境，避免依赖混乱。
+
+建议优先使用 Python 3.12 或 3.13。
+当前如果使用 Python 3.14，LangGraph 相关依赖虽然可以安装，但会打印兼容性警告。
 
 ## 如何启动前端
 
@@ -64,18 +59,18 @@ npm run dev
 
 前端默认访问后端地址：`http://127.0.0.1:8000`
 
-## 下一步会做什么
+## 建议的学习顺序
 
-接下来的迭代不会一次性把所有功能全做完，而是继续按小步推进：
+1. 先看 `backend/app/catalog`、`backend/app/faq`、`backend/app/compare`
+   先理解什么叫“可复用业务工具”
+2. 再看 `backend/app/intent`
+   理解 LLM 在系统里如何只负责“理解需求”，而不是直接编造商品结果
+3. 最后看 `backend/app/agent`
+   理解 LangGraph 是如何把路由、工具调用和最终回答串起来的
+4. 对照 `frontend/src/App.vue` 和 `frontend/src/components/AgentPromptPanel.vue`
+   理解前端如何把 Agent 运行过程可视化
 
-1. 把静态商品数据迁移到后端接口
-2. 增加真实的商品搜索接口
-3. 接入 PostgreSQL 存储商品与 FAQ 数据
-4. 接入 OpenAI SDK 做意图解析
-5. 用 LangGraph 串起导购推荐工作流
-
-## 架构文档
-
-详细架构说明见：
+## 文档入口
 
 - `docs/电商导购Agent-V1架构与迭代计划.md`
+- `docs/迭代-08-LangGraph单Agent编排与预检.md`

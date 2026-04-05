@@ -4,6 +4,7 @@ import type { Product } from "../types/catalog";
 defineProps<{
   products: Product[];
   selectedIds: string[];
+  recommendedIds: string[];
   loading: boolean;
   errorMessage: string;
   appliedFilters: string[];
@@ -20,8 +21,8 @@ const emit = defineEmits<{
       <div>
         <h2 class="panel-title">商品结果区</h2>
         <p class="muted-copy mt-2">
-          这里展示的是后端 `GET /products` 接口返回的数据。后续 LangGraph 需要推荐商品时，
-          也应该优先调用这种真实业务工具，而不是直接让模型编造商品信息。
+          这里展示的是后端 `GET /products` 接口返回的数据。后面不管是手动搜索还是 Agent 推荐，
+          真正的商品事实都应该来自这类业务接口，而不是让模型直接编造商品信息。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">当前结果 {{ products.length }} 条</span>
@@ -49,11 +50,24 @@ const emit = defineEmits<{
       <article
         v-for="product in products"
         :key="product.id"
-        class="rounded-3xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-lg"
+        class="rounded-3xl border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-lg"
+        :class="
+          recommendedIds.includes(product.id)
+            ? 'border-amber-300 shadow-[0_18px_40px_rgba(245,158,11,0.14)]'
+            : 'border-slate-200'
+        "
       >
         <div class="flex items-start justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-amber-700">{{ product.category }}</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-sm font-medium text-amber-700">{{ product.category }}</p>
+              <span
+                v-if="recommendedIds.includes(product.id)"
+                class="chip bg-amber-100 text-amber-800"
+              >
+                Agent 推荐
+              </span>
+            </div>
             <h3 class="mt-2 text-lg font-semibold text-slate-900">{{ product.name }}</h3>
           </div>
           <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
@@ -61,7 +75,7 @@ const emit = defineEmits<{
           </span>
         </div>
 
-        <p class="mt-4 text-3xl font-semibold text-slate-900">¥{{ product.price }}</p>
+        <p class="mt-4 text-3xl font-semibold text-slate-900">￥{{ product.price }}</p>
         <p class="mt-1 text-xs text-slate-500">{{ product.price_note }}</p>
         <p class="mt-3 text-sm leading-7 text-slate-600">{{ product.summary }}</p>
         <p class="mt-3 text-sm text-slate-500">适用场景：{{ product.scenario }}</p>
@@ -107,7 +121,7 @@ const emit = defineEmits<{
     >
       <p class="text-base font-medium text-slate-900">当前没有命中商品</p>
       <p class="mt-2 text-sm text-slate-600">
-        这说明后端筛选已经生效。后续 Agent 介入时，也必须基于这样的真实检索结果做推荐和解释。
+        这说明后端筛选已经生效。后续 Agent 介入时，也必须基于这种真实检索结果做推荐和解释。
       </p>
     </div>
   </section>

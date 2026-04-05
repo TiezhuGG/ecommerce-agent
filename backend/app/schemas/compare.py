@@ -4,7 +4,7 @@ from app.schemas.products import ProductSummary
 
 
 class CompareRequest(BaseModel):
-    """商品对比接口请求。"""
+    """商品对比请求。"""
 
     product_ids: list[str] = Field(
         ...,
@@ -15,11 +15,7 @@ class CompareRequest(BaseModel):
 
 
 class CompareResponse(BaseModel):
-    """商品对比接口响应。
-
-    当前摘要由后端规则生成，不依赖 LLM。
-    这样对比能力本身先是稳定工具，后续 Agent 再复用它。
-    """
+    """商品对比响应。"""
 
     compared_products: list[ProductSummary]
     summary: str

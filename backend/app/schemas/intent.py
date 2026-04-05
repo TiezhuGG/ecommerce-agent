@@ -17,11 +17,7 @@ class IntentSearchFilters(BaseModel):
 
 
 class IntentParseResponse(BaseModel):
-    """意图解析接口响应。
-
-    模型只负责把自然语言整理成结构化条件，
-    真正的商品事实仍然必须来自 `/products` 业务接口。
-    """
+    """意图解析接口响应。"""
 
     query: str
     search_filters: IntentSearchFilters

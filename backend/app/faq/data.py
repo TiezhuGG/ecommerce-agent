@@ -1,7 +1,7 @@
 from app.schemas.faq import FaqEntry
 
 
-# FAQ 仍然先放在代码里，是为了先把“业务工具”这件事讲清楚。
+# FAQ 先放在代码里，是为了把“业务工具”这件事先讲清楚。
 # 后续接数据库或知识库时，这个结构可以继续保留，只替换底层数据来源。
 FAQ_ENTRIES: list[FaqEntry] = [
     FaqEntry(
@@ -16,7 +16,7 @@ FAQ_ENTRIES: list[FaqEntry] = [
         id="faq-return-002",
         topic="退换货",
         question="拆封后还能退吗？",
-        answer="若商品拆封后不影响二次销售，且符合平台售后规则，仍可申请售后；具体以商品页和平台规则为准。",
+        answer="如果商品拆封后不影响二次销售，且符合平台售后规则，仍可申请售后；具体以商品页和平台规则为准。",
         source_label="售后政策 V1",
         keywords=["拆封", "退货", "售后", "二次销售"],
     ),
