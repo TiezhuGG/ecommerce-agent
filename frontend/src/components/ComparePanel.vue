@@ -16,8 +16,8 @@ defineProps<{
       <div>
         <h2 class="panel-title">商品对比区</h2>
         <p class="muted-copy mt-2">
-          这一块现在已经接入真实后端接口。它和商品搜索、FAQ 一样，都是后续 Agent
-          可以直接调用的业务工具。当前总结内容仍由后端规则逻辑生成，还没有交给模型。
+          这里已经接入真实后端接口。它和商品搜索、FAQ 一样，都是后续 Agent 可以直接复用的业务工具。
+          当前对比结论仍然由后端规则逻辑生成，还没有交给模型总结。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">已选 {{ selectedProducts.length }} 件</span>
@@ -33,7 +33,7 @@ defineProps<{
         <h3 class="mt-2 text-base font-semibold text-slate-900">{{ product.name }}</h3>
         <p class="mt-3 text-2xl font-semibold text-slate-900">¥{{ product.price }}</p>
         <ul class="mt-4 space-y-2 text-sm text-slate-600">
-          <li v-for="spec in product.specs" :key="spec">• {{ spec }}</li>
+          <li v-for="spec in product.specs" :key="spec">- {{ spec }}</li>
         </ul>
       </div>
 
@@ -46,15 +46,21 @@ defineProps<{
     </div>
 
     <p v-if="loading" class="mt-6 text-sm text-slate-600">正在生成商品对比结果...</p>
-    <p v-else-if="errorMessage" class="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+    <p
+      v-else-if="errorMessage"
+      class="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700"
+    >
       商品对比失败：{{ errorMessage }}
     </p>
 
-    <div v-else-if="result" class="mt-6 space-y-4 rounded-3xl bg-amber-50 p-5 text-sm leading-7 text-amber-900">
+    <div
+      v-else-if="result"
+      class="mt-6 space-y-4 rounded-3xl bg-amber-50 p-5 text-sm leading-7 text-amber-900"
+    >
       <p>{{ result.summary }}</p>
 
       <ul class="space-y-2">
-        <li v-for="item in result.highlights" :key="item">• {{ item }}</li>
+        <li v-for="item in result.highlights" :key="item">- {{ item }}</li>
       </ul>
     </div>
   </section>

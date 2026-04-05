@@ -1,6 +1,5 @@
 from app.catalog.data import PRODUCT_CATALOG
 from app.schemas.compare import CompareResponse
-from app.schemas.products import ProductSummary
 
 
 def compare_products(product_ids: list[str]) -> CompareResponse:
@@ -27,7 +26,7 @@ def compare_products(product_ids: list[str]) -> CompareResponse:
     summary = (
         f"本次对比共涉及 {len(compared_products)} 款商品。"
         f"如果你更关注预算控制，可以优先看 {cheapest.name}；"
-        f"如果你更关注高定位配置，可以重点关注 {expensive.name}。"
+        f"如果你更关注更高定位的配置，可以重点关注 {expensive.name}。"
         f"这些商品主要覆盖的使用场景包括：{scenarios}。"
     )
 

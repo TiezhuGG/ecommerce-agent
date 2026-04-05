@@ -1,7 +1,13 @@
+import type { SearchFilters } from "./catalog";
+
+
 export type AgentResult = {
-  title: string;
-  parsedIntent: string;
+  query: string;
+  searchFilters: SearchFilters;
+  scenario: string;
+  priorities: string[];
   appliedFilters: string[];
-  answer: string;
-  executionSteps: string[];
+  reasoningSummary: string;
+  provider: string;
+  model: string;
 };

@@ -10,8 +10,8 @@ router = APIRouter(prefix="/faq", tags=["faq"])
 async def ask_faq_endpoint(payload: FaqAskRequest) -> FaqAskResponse:
     """售前 FAQ 工具接口。
 
-    这个接口的角色和商品搜索接口类似：
-    它先提供一个稳定的业务工具，后续 Agent 再来调用它，而不是直接让模型自由发挥。
+    这类接口的价值在于先把稳定业务能力独立出来，
+    后续 Agent 只负责判断什么时候调用它，而不是自己编规则。
     """
 
     return ask_faq(payload.question)

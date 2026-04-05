@@ -39,8 +39,8 @@ function submitFaq() {
   <section class="panel p-6">
     <h2 class="panel-title">售前 FAQ 区</h2>
     <p class="muted-copy mt-2">
-      这块现在已经接入真实后端接口。它和商品搜索一样，都是后续 Agent
-      可以调用的业务工具，只不过它负责回答“规则和政策类问题”。
+      这块已经接入真实后端接口。它和商品搜索一样，都是后续 Agent 可以调用的业务工具，
+      只是它专门回答规则、政策和售前说明类问题。
     </p>
 
     <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
@@ -74,7 +74,10 @@ function submitFaq() {
           {{ loading ? "查询中..." : "查询 FAQ" }}
         </button>
 
-        <p v-if="errorMessage" class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <p
+          v-if="errorMessage"
+          class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700"
+        >
           FAQ 查询失败：{{ errorMessage }}
         </p>
 

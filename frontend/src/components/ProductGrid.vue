@@ -20,8 +20,8 @@ const emit = defineEmits<{
       <div>
         <h2 class="panel-title">商品结果区</h2>
         <p class="muted-copy mt-2">
-          这里展示的是后端 `GET /products` 接口返回的数据。后续 LangGraph
-          需要推荐商品时，也应该优先调用这类业务检索工具，而不是直接让模型编造商品事实。
+          这里展示的是后端 `GET /products` 接口返回的数据。后续 LangGraph 需要推荐商品时，
+          也应该优先调用这种真实业务工具，而不是直接让模型编造商品信息。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">当前结果 {{ products.length }} 条</span>
@@ -38,14 +38,14 @@ const emit = defineEmits<{
     </div>
 
     <p v-if="loading" class="mt-6 text-sm text-slate-600">正在从后端加载商品数据...</p>
-    <p v-else-if="errorMessage" class="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+    <p
+      v-else-if="errorMessage"
+      class="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700"
+    >
       商品搜索失败：{{ errorMessage }}
     </p>
 
-    <div
-      v-else-if="products.length"
-      class="mt-6 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3"
-    >
+    <div v-else-if="products.length" class="mt-6 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
       <article
         v-for="product in products"
         :key="product.id"
@@ -77,7 +77,7 @@ const emit = defineEmits<{
         </div>
 
         <ul class="mt-5 space-y-2 text-sm text-slate-600">
-          <li v-for="spec in product.specs" :key="spec">• {{ spec }}</li>
+          <li v-for="spec in product.specs" :key="spec">- {{ spec }}</li>
         </ul>
 
         <div class="mt-5 grid gap-3">
@@ -107,7 +107,7 @@ const emit = defineEmits<{
     >
       <p class="text-base font-medium text-slate-900">当前没有命中商品</p>
       <p class="mt-2 text-sm text-slate-600">
-        这说明后端筛选已经生效。后续 Agent 介入时，需要基于这类真实检索结果做推荐和解释。
+        这说明后端筛选已经生效。后续 Agent 介入时，也必须基于这样的真实检索结果做推荐和解释。
       </p>
     </div>
   </section>

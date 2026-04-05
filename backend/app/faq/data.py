@@ -1,8 +1,8 @@
 from app.schemas.faq import FaqEntry
 
 
-# FAQ 数据仍然先放在代码里，原因和商品目录一样：
-# 先把“工具接口”和“业务边界”讲清楚，再上数据库，会更适合教学推进。
+# FAQ 仍然先放在代码里，是为了先把“业务工具”这件事讲清楚。
+# 后续接数据库或知识库时，这个结构可以继续保留，只替换底层数据来源。
 FAQ_ENTRIES: list[FaqEntry] = [
     FaqEntry(
         id="faq-return-001",
@@ -18,7 +18,7 @@ FAQ_ENTRIES: list[FaqEntry] = [
         question="拆封后还能退吗？",
         answer="若商品拆封后不影响二次销售，且符合平台售后规则，仍可申请售后；具体以商品页和平台规则为准。",
         source_label="售后政策 V1",
-        keywords=["拆封", "退货", "售后", "影响二次销售"],
+        keywords=["拆封", "退货", "售后", "二次销售"],
     ),
     FaqEntry(
         id="faq-invoice-001",

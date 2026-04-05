@@ -8,17 +8,15 @@ router = APIRouter(prefix="/products", tags=["products"])
 
 @router.get("", response_model=ProductSearchResponse)
 async def get_products(
-    keyword: str = Query(default="", description="Free-text keyword used for the demo search."),
-    category: str = Query(default="", description="Exact category filter."),
-    brand: str = Query(default="", description="Exact brand filter."),
-    max_price: int | None = Query(default=None, ge=0, description="Upper budget limit in CNY."),
+    keyword: str = Query(default="", description="商品搜索关键词。"),
+    category: str = Query(default="", description="精确的商品分类筛选。"),
+    brand: str = Query(default="", description="精确的品牌筛选。"),
+    max_price: int | None = Query(default=None, ge=0, description="人民币预算上限。"),
 ) -> ProductSearchResponse:
-    """Expose the catalog search capability to the frontend.
+    """商品搜索工具接口。
 
-    The frontend search panel maps directly to these query parameters.
-    Keeping this as a small, explicit HTTP contract makes it easy to teach:
-    first the UI learns to talk to a normal backend endpoint, then the agent
-    layer will learn to call the same capability as a structured tool.
+    前端筛选面板和后续 Agent 都调用同一个接口，
+    这样你可以看到 AI 并没有绕过业务系统，而是在复用业务能力。
     """
 
     return search_products(

@@ -5,14 +5,14 @@ from app.schemas.products import ProductSearchResponse, ProductSummary
 def _matches_keyword(product: ProductSummary, keyword: str) -> bool:
     """执行最小可解释的关键词匹配。
 
-    当前阶段我们故意不做复杂搜索算法，也不把这件事交给 LLM。
-    原因很简单：在 Agent 介入之前，商品检索必须先是一个稳定、可预测、可解释的业务工具。
-    只有这样，后续 LangGraph 才能安全地把它当作工具节点来调用。
+    当前阶段先不接入向量检索，也不让 LLM 直接负责商品事实搜索，
+    而是保留一个稳定、可预测、可复用的业务检索工具。
+    后续无论是 LangChain 还是 LangGraph，本质上都应该调用这类工具。
     """
 
     normalized = keyword.strip().lower()
     if not normalized:
-      return True
+        return True
 
     haystacks = [
         product.name,

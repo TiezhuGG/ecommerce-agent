@@ -17,9 +17,8 @@ class CompareRequest(BaseModel):
 class CompareResponse(BaseModel):
     """商品对比接口响应。
 
-    这里既返回参与对比的商品事实，也返回后端生成的对比摘要。
-    当前摘要仍然是普通业务逻辑拼接出来的，不是 AI 总结。
-    这样做可以先把“对比能力”做成稳定工具，后续 Agent 再复用。
+    当前摘要由后端规则生成，不依赖 LLM。
+    这样对比能力本身先是稳定工具，后续 Agent 再复用它。
     """
 
     compared_products: list[ProductSummary]
