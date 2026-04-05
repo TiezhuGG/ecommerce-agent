@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 
-import type { FaqEntry } from "../types";
+import type { FaqEntry } from "../types/faq";
 
 const props = defineProps<{
   entries: FaqEntry[];
@@ -14,8 +14,8 @@ const activeId = ref(props.entries[0]?.id ?? "");
   <section class="panel p-6">
     <h2 class="panel-title">售前 FAQ 区</h2>
     <p class="muted-copy mt-2">
-      FAQ 仍保留静态演示数据。这样你可以直观看到：这轮已经迁到后端的是商品搜索，而 FAQ
-      还没有迁移，下一轮会继续推进这块。
+      FAQ 仍保留静态演示数据。这样你可以直观看到：商品搜索已经进入真实接口阶段，而 FAQ
+      还没有迁移，后面我们会单独把它做成后端工具。
     </p>
 
     <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">

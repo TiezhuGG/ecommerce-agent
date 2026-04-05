@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 
-import type { AgentResult } from "../types";
+import type { AgentResult } from "../types/agent";
 
 defineProps<{
   result: AgentResult | null;
@@ -22,8 +22,8 @@ function submitPrompt() {
   <section class="panel p-6">
     <h2 class="panel-title">智能导购入口</h2>
     <p class="muted-copy mt-2">
-      这里还没有接入 LangGraph，当前只是演示版入口。它会读取当前页面里的商品结果，模拟“自然语言需求
-      -> 推荐摘要”的效果，帮助你先理解 Agent 未来要接管的业务位置。
+      这里仍然是前端演示逻辑，但它已经建立在真实后端商品检索结果之上。后续接入
+      LangGraph 时，这里会从“演示推荐”升级为真正的 Agent 入口。
     </p>
 
     <textarea

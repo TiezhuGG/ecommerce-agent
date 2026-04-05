@@ -3,16 +3,16 @@ from app.schemas.products import ProductSearchResponse, ProductSummary
 
 
 def _matches_keyword(product: ProductSummary, keyword: str) -> bool:
-    """Keyword search is intentionally simple in this iteration.
+    """执行最小可解释的关键词匹配。
 
-    We only need a stable, explainable search behavior before introducing a
-    database or any AI-based ranking. Later, the agent workflow can treat this
-    function as the baseline catalog-search tool and orchestrate around it.
+    当前阶段我们故意不做复杂搜索算法，也不把这件事交给 LLM。
+    原因很简单：在 Agent 介入之前，商品检索必须先是一个稳定、可预测、可解释的业务工具。
+    只有这样，后续 LangGraph 才能安全地把它当作工具节点来调用。
     """
 
     normalized = keyword.strip().lower()
     if not normalized:
-        return True
+      return True
 
     haystacks = [
         product.name,
@@ -33,12 +33,7 @@ def search_products(
     brand: str = "",
     max_price: int | None = None,
 ) -> ProductSearchResponse:
-    """Search the demo catalog with structured filters.
-
-    This is deliberately kept as plain business logic instead of AI logic.
-    In later iterations, the agent will call this capability as a tool, which
-    is much safer than asking the LLM to invent products or hardware specs.
-    """
+    """按结构化条件搜索商品目录。"""
 
     matched_items = [
         product

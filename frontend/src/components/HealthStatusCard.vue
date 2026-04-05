@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { HealthResponse } from "../types";
+import type { HealthResponse } from "../types/system";
 
 defineProps<{
   health: HealthResponse | null;
@@ -18,8 +18,8 @@ defineProps<{
         </p>
         <h2 class="mt-3 text-2xl font-semibold text-ink">基础后端已接入</h2>
         <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-          这个区域只负责验证前后端链路是否通畅。你可以把它理解成整个项目的基础设施探针：
-          `/health` 正常，说明前端至少能访问 FastAPI；后续搜索、FAQ、Agent 接口都会复用同一条链路。
+          这个模块只负责验证前端是否能正常访问 FastAPI。后续商品搜索、FAQ、对比分析、Agent
+          工作流都会复用同一套前后端通信基础，所以这里相当于整个项目的“系统体检入口”。
         </p>
       </div>
 

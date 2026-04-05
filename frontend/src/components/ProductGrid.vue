@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Product } from "../types";
+import type { Product } from "../types/catalog";
 
 defineProps<{
   products: Product[];
@@ -20,8 +20,8 @@ const emit = defineEmits<{
       <div>
         <h2 class="panel-title">商品结果区</h2>
         <p class="muted-copy mt-2">
-          这块现在展示的是后端 `GET /products` 接口返回的数据。后面 LangGraph
-          需要推荐商品时，也会调用同一类检索能力，而不是绕开业务系统自己编商品信息。
+          这里展示的是后端 `GET /products` 接口返回的数据。后续 LangGraph
+          需要推荐商品时，也应该优先调用这类业务检索工具，而不是直接让模型编造商品事实。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">当前结果 {{ products.length }} 条</span>

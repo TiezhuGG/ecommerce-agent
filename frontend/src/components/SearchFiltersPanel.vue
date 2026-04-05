@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SearchFilters } from "../types";
+import type { SearchFilters } from "../types/catalog";
 
 const props = defineProps<{
   filters: SearchFilters;
@@ -26,8 +26,8 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
       <div>
         <h2 class="panel-title">结构化商品搜索</h2>
         <p class="muted-copy mt-2">
-          这一块现在已经开始对接真实后端接口。你在这里输入的条件，会被转换成查询参数发送给
-          FastAPI 的商品搜索接口，而不是继续在前端本地过滤静态数组。
+          这个模块负责收集用户的结构化筛选条件。它本身不负责请求后端，而是把筛选状态交给页面总控，
+          由页面总控决定何时发请求，这样组件职责会更清晰。
         </p>
       </div>
       <button
@@ -46,7 +46,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
           :value="filters.keyword"
           type="text"
           class="field-input"
-          placeholder="例如：降噪耳机、4K 显示器、办公键盘"
+          placeholder="例如：降噪耳机、4K 显示器、移动 SSD"
           @input="updateField('keyword', ($event.target as HTMLInputElement).value)"
         />
       </label>

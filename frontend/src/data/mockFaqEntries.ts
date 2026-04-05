@@ -1,8 +1,8 @@
-import type { FaqEntry } from "../types";
+import type { FaqEntry } from "../types/faq";
 
-// FAQ 这一轮仍保留前端静态数据，因为本轮重点是先把商品搜索迁到后端。
-// 这样你可以清楚看到：同一个页面里，哪些区域已经开始走真实接口，
-// 哪些区域还只是演示占位。下一轮我们会把 FAQ 也迁到后端。
+// FAQ 这一轮继续保留前端静态数据。
+// 这样你可以明确看到：商品搜索已经进后端，FAQ 还停留在占位阶段，
+// 方便后续单独把 FAQ 工具也迁到后端并写成下一轮迭代文档。
 export const mockFaqEntries: FaqEntry[] = [
   {
     id: "faq-001",

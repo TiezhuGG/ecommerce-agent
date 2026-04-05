@@ -9,7 +9,9 @@ import HealthStatusCard from "./components/HealthStatusCard.vue";
 import ProductGrid from "./components/ProductGrid.vue";
 import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
 import { mockFaqEntries } from "./data/mockFaqEntries";
-import type { AgentResult, HealthResponse, Product, SearchFilters } from "./types";
+import type { AgentResult } from "./types/agent";
+import type { Product, SearchFilters } from "./types/catalog";
+import type { HealthResponse } from "./types/system";
 
 const apiBaseUrl = "http://127.0.0.1:8000";
 
@@ -69,8 +71,8 @@ async function loadProducts() {
     availableCategories.value = result.available_categories;
     availableBrands.value = result.available_brands;
 
-    // When the result set changes, keep only compare selections that still exist
-    // in the latest backend response. This avoids stale selection state.
+    // 商品列表发生变化后，只保留当前结果集中还存在的对比项。
+    // 这样可以避免用户筛选条件变化后，右侧对比区还残留失效商品。
     const currentIds = new Set(result.items.map((item) => item.id));
     selectedProductIds.value = selectedProductIds.value.filter((id) => currentIds.has(id));
   } catch (error) {
@@ -125,6 +127,9 @@ function buildAgentResult(query: string, visibleProducts: Product[]): AgentResul
   if (lowerQuery.includes("鼠标")) {
     inferredFilters.push("分类：鼠标");
   }
+  if (lowerQuery.includes("固态") || lowerQuery.includes("ssd")) {
+    inferredFilters.push("分类：移动固态硬盘");
+  }
   if (lowerQuery.includes("通勤")) {
     inferredFilters.push("场景：通勤");
   }
@@ -142,6 +147,9 @@ function buildAgentResult(query: string, visibleProducts: Product[]): AgentResul
     ? `已为你锁定 ${topProducts.length} 个重点候选商品`
     : "当前条件下没有理想候选商品";
 
+  // 这里仍然是前端演示逻辑，不是真正的 Agent。
+  // 但它很重要，因为它先把“基于真实检索结果生成推荐解释”的交互位置搭了出来。
+  // 等接入 LangGraph 后，我们会把这部分替换成“意图解析 -> 工具调用 -> 答案生成”的正式工作流。
   const answer = topProducts.length
     ? `结合当前检索结果，我优先建议你关注 ${topProducts.join("、")}。注意这里的推荐仍然是前端演示逻辑，但它已经建立在真实后端商品检索结果之上，后续接入 LangGraph 后，这里会升级为“先检索，再推理，再生成解释”的正式工作流。`
     : "当前商品检索没有命中结果。后续接入 Agent 后，这里会增加补充提问和替代推荐逻辑。";
@@ -174,9 +182,9 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 watch(
   filters,
   () => {
-    // A tiny debounce keeps the UI responsive while preventing a request on
-    // every single keystroke. This is a common pattern before introducing a
-    // more advanced data-fetching layer.
+    // 这里做一个很轻量的防抖。
+    // 目的不是炫技，而是避免用户每敲一个字就立刻发一次请求，
+    // 同时也让你看到：页面总控负责“何时请求”，而筛选组件只负责“收集条件”。
     if (searchTimer) {
       clearTimeout(searchTimer);
     }
@@ -200,35 +208,33 @@ onMounted(() => {
       <div class="grid gap-8 px-6 py-8 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-10">
         <div>
           <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700">
-            电商导购 Agent · 第二轮迭代
+            电商导购 Agent · 第三轮迭代
           </p>
           <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-            先把商品搜索做成真实后端能力，再逐步接上 AI 工作流
+            先把商品目录做厚，再把前端分层做清楚
           </h1>
           <p class="mt-5 max-w-3xl text-base leading-8 text-slate-600">
-            这轮的核心变化是：商品结果已经不再依赖前端静态筛选，而是改为请求 FastAPI
-            的真实接口。后面无论是 FAQ、对比分析，还是 LangGraph 推荐工作流，都会沿着这条“前端发请求
-            -> 后端提供业务工具 -> AI 只做理解与编排”的路线继续演进。
+            这一轮重点解决两个问题：一是商品数据太少，无法支撑像样的搜索与推荐；二是前端类型和请求开始变多，
+            如果不提前分层，后面 FAQ、对比分析、意图解析、LangGraph 接口加进来后会越来越乱。
           </p>
 
           <div class="mt-6 flex flex-wrap gap-3">
-            <span class="chip bg-amber-100 text-amber-800">真实品牌与型号</span>
-            <span class="chip bg-sky-100 text-sky-800">后端商品搜索接口</span>
-            <span class="chip bg-emerald-100 text-emerald-800">中文响应式页面</span>
-            <span class="chip bg-violet-100 text-violet-800">LangGraph 预留</span>
+            <span class="chip bg-amber-100 text-amber-800">20 条真实型号商品</span>
+            <span class="chip bg-sky-100 text-sky-800">类型分层</span>
+            <span class="chip bg-emerald-100 text-emerald-800">中文教学注释</span>
+            <span class="chip bg-violet-100 text-violet-800">Agent 工作流预留</span>
           </div>
         </div>
 
         <div class="rounded-[28px] bg-ink p-6 text-white">
           <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-300">
-            第二轮重点
+            第三轮重点
           </p>
           <ul class="mt-5 space-y-4 text-sm leading-7 text-slate-200">
-            <li>1. 商品数据迁到后端，作为真实业务检索工具</li>
-            <li>2. 前端筛选条件映射为 HTTP 查询参数</li>
-            <li>3. 商品结果区消费后端接口返回结果</li>
-            <li>4. FAQ 与导购区暂时保留演示逻辑，不混在本轮一起做</li>
-            <li>5. 每一轮新增一份 docs 复盘文档，方便后面系统回顾</li>
+            <li>1. 扩充真实品牌与型号的商品目录，覆盖更多品类和价格带</li>
+            <li>2. 修复前端残留乱码，统一中文文案与中文注释</li>
+            <li>3. 将领域类型与接口响应契约拆开，降低后续扩展混乱度</li>
+            <li>4. 保持 FAQ 与 Agent 区仍为演示态，避免本轮目标扩散</li>
           </ul>
         </div>
       </div>

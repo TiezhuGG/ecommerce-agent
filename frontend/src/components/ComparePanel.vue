@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import type { Product } from "../types";
+import type { Product } from "../types/catalog";
 
 const props = defineProps<{
   selectedProducts: Product[];
@@ -25,8 +25,8 @@ const comparisonSummary = computed(() => {
       <div>
         <h2 class="panel-title">商品对比区</h2>
         <p class="muted-copy mt-2">
-          这一块暂时还保留前端演示逻辑。它的意义是先把“选中商品 ->
-          生成对比结论”的业务链路摆出来，下一轮再迁到后端接口。
+          这一块暂时还保留前端演示逻辑。它的意义是先把“选中商品 -> 生成对比结论”的业务链路摆出来，
+          下一轮再迁到后端接口。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">已选 {{ selectedProducts.length }} 件</span>

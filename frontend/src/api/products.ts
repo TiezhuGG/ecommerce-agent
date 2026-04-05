@@ -1,21 +1,14 @@
-import type { Product, SearchFilters } from "../types";
-
-type ProductSearchResponse = {
-  items: Product[];
-  total: number;
-  applied_filters: string[];
-  available_categories: string[];
-  available_brands: string[];
-};
+import type { ProductSearchResponse } from "./contracts/products";
+import type { SearchFilters } from "../types/catalog";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
 export async function fetchProducts(filters: SearchFilters): Promise<ProductSearchResponse> {
   const params = new URLSearchParams();
 
-  // Keep the request builder explicit so you can clearly see how frontend state
-  // maps into HTTP query parameters. This is important because later the agent
-  // layer will produce the same filter structure programmatically.
+  // 这里保留显式拼接参数的写法，是为了让你能清楚看到：
+  // 页面里的结构化筛选状态，是如何一步步映射成后端查询参数的。
+  // 后续 Agent 生成结构化条件时，本质上也会走同样的参数结构。
   if (filters.keyword.trim()) {
     params.set("keyword", filters.keyword.trim());
   }
