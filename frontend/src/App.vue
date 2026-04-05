@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 
+import type { CompareResponse } from "./api/contracts/compare";
+import type { FaqAskResponse } from "./api/contracts/faq";
+import { compareProducts } from "./api/compare";
+import { askFaq } from "./api/faq";
 import { fetchProducts } from "./api/products";
 import AgentPromptPanel from "./components/AgentPromptPanel.vue";
 import ComparePanel from "./components/ComparePanel.vue";
@@ -8,7 +12,7 @@ import FaqPanel from "./components/FaqPanel.vue";
 import HealthStatusCard from "./components/HealthStatusCard.vue";
 import ProductGrid from "./components/ProductGrid.vue";
 import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
-import { mockFaqEntries } from "./data/mockFaqEntries";
+import { suggestedFaqQuestions } from "./data/mockFaqEntries";
 import type { AgentResult } from "./types/agent";
 import type { Product, SearchFilters } from "./types/catalog";
 import type { HealthResponse } from "./types/system";
@@ -34,7 +38,16 @@ const availableCategories = ref<string[]>([]);
 const availableBrands = ref<string[]>([]);
 
 const selectedProductIds = ref<string[]>([]);
+
+const compareResult = ref<CompareResponse | null>(null);
+const compareLoading = ref(false);
+const compareErrorMessage = ref("");
+
 const agentResult = ref<AgentResult | null>(null);
+
+const faqResult = ref<FaqAskResponse | null>(null);
+const faqLoading = ref(false);
+const faqErrorMessage = ref("");
 
 const selectedProducts = computed(() =>
   products.value.filter((product) => selectedProductIds.value.includes(product.id)),
@@ -71,8 +84,6 @@ async function loadProducts() {
     availableCategories.value = result.available_categories;
     availableBrands.value = result.available_brands;
 
-    // 商品列表发生变化后，只保留当前结果集中还存在的对比项。
-    // 这样可以避免用户筛选条件变化后，右侧对比区还残留失效商品。
     const currentIds = new Set(result.items.map((item) => item.id));
     selectedProductIds.value = selectedProductIds.value.filter((id) => currentIds.has(id));
   } catch (error) {
@@ -81,6 +92,36 @@ async function loadProducts() {
       error instanceof Error ? error.message : "未知错误，无法加载商品列表";
   } finally {
     productsLoading.value = false;
+  }
+}
+
+async function submitFaq(question: string) {
+  faqLoading.value = true;
+  faqErrorMessage.value = "";
+
+  try {
+    faqResult.value = await askFaq(question);
+  } catch (error) {
+    faqResult.value = null;
+    faqErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法查询 FAQ";
+  } finally {
+    faqLoading.value = false;
+  }
+}
+
+async function loadCompare(productIds: string[]) {
+  compareLoading.value = true;
+  compareErrorMessage.value = "";
+
+  try {
+    compareResult.value = await compareProducts(productIds);
+  } catch (error) {
+    compareResult.value = null;
+    compareErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法生成商品对比";
+  } finally {
+    compareLoading.value = false;
   }
 }
 
@@ -147,11 +188,8 @@ function buildAgentResult(query: string, visibleProducts: Product[]): AgentResul
     ? `已为你锁定 ${topProducts.length} 个重点候选商品`
     : "当前条件下没有理想候选商品";
 
-  // 这里仍然是前端演示逻辑，不是真正的 Agent。
-  // 但它很重要，因为它先把“基于真实检索结果生成推荐解释”的交互位置搭了出来。
-  // 等接入 LangGraph 后，我们会把这部分替换成“意图解析 -> 工具调用 -> 答案生成”的正式工作流。
   const answer = topProducts.length
-    ? `结合当前检索结果，我优先建议你关注 ${topProducts.join("、")}。注意这里的推荐仍然是前端演示逻辑，但它已经建立在真实后端商品检索结果之上，后续接入 LangGraph 后，这里会升级为“先检索，再推理，再生成解释”的正式工作流。`
+    ? `结合当前检索结果，我优先建议你关注 ${topProducts.join("、")}。注意这里的推荐仍然是前端演示逻辑，但它已经建立在真实后端商品检索结果之上。等我们接入 LangGraph 后，这里会升级为“意图解析 -> 工具调用 -> 生成解释”的正式 Agent 工作流。`
     : "当前商品检索没有命中结果。后续接入 Agent 后，这里会增加补充提问和替代推荐逻辑。";
 
   return {
@@ -182,9 +220,6 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 watch(
   filters,
   () => {
-    // 这里做一个很轻量的防抖。
-    // 目的不是炫技，而是避免用户每敲一个字就立刻发一次请求，
-    // 同时也让你看到：页面总控负责“何时请求”，而筛选组件只负责“收集条件”。
     if (searchTimer) {
       clearTimeout(searchTimer);
     }
@@ -196,9 +231,26 @@ watch(
   { deep: true },
 );
 
+watch(
+  selectedProductIds,
+  (ids) => {
+    // 当用户选中至少 2 个商品时，自动请求后端对比接口。
+    // 这样你可以清楚看到：对比能力已经不是前端拼文案，而是独立的业务工具。
+    if (ids.length < 2) {
+      compareResult.value = null;
+      compareErrorMessage.value = "";
+      return;
+    }
+
+    void loadCompare(ids);
+  },
+  { deep: true },
+);
+
 onMounted(() => {
   void loadHealth();
   void loadProducts();
+  void submitFaq(suggestedFaqQuestions[0] ?? "支持七天无理由退换货吗？");
 });
 </script>
 
@@ -208,33 +260,33 @@ onMounted(() => {
       <div class="grid gap-8 px-6 py-8 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-10">
         <div>
           <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700">
-            电商导购 Agent · 第三轮迭代
+            电商导购 Agent · 第五轮迭代
           </p>
           <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-            先把商品目录做厚，再把前端分层做清楚
+            把商品对比也做成后端工具，形成更完整的 Agent 编排基座
           </h1>
           <p class="mt-5 max-w-3xl text-base leading-8 text-slate-600">
-            这一轮重点解决两个问题：一是商品数据太少，无法支撑像样的搜索与推荐；二是前端类型和请求开始变多，
-            如果不提前分层，后面 FAQ、对比分析、意图解析、LangGraph 接口加进来后会越来越乱。
+            现在项目里已经有三个真实业务工具：商品搜索、FAQ 查询、商品对比。后续 LangGraph
+            接入时，它的职责会进一步聚焦在“理解意图、调用工具、组织答案”，而不是自己捏造事实。
           </p>
 
           <div class="mt-6 flex flex-wrap gap-3">
-            <span class="chip bg-amber-100 text-amber-800">20 条真实型号商品</span>
-            <span class="chip bg-sky-100 text-sky-800">类型分层</span>
-            <span class="chip bg-emerald-100 text-emerald-800">中文教学注释</span>
-            <span class="chip bg-violet-100 text-violet-800">Agent 工作流预留</span>
+            <span class="chip bg-amber-100 text-amber-800">商品搜索工具</span>
+            <span class="chip bg-sky-100 text-sky-800">FAQ 工具</span>
+            <span class="chip bg-emerald-100 text-emerald-800">商品对比工具</span>
+            <span class="chip bg-violet-100 text-violet-800">LangGraph 预备完成</span>
           </div>
         </div>
 
         <div class="rounded-[28px] bg-ink p-6 text-white">
           <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-300">
-            第三轮重点
+            第五轮重点
           </p>
           <ul class="mt-5 space-y-4 text-sm leading-7 text-slate-200">
-            <li>1. 扩充真实品牌与型号的商品目录，覆盖更多品类和价格带</li>
-            <li>2. 修复前端残留乱码，统一中文文案与中文注释</li>
-            <li>3. 将领域类型与接口响应契约拆开，降低后续扩展混乱度</li>
-            <li>4. 保持 FAQ 与 Agent 区仍为演示态，避免本轮目标扩散</li>
+            <li>1. 新增商品对比后端接口与规则型总结逻辑</li>
+            <li>2. 前端对比区改为请求后端，不再只靠本地拼接摘要</li>
+            <li>3. 项目里形成三个可被 Agent 复用的业务工具</li>
+            <li>4. 顺手清理残留乱码，保持中文可读性</li>
           </ul>
         </div>
       </div>
@@ -267,9 +319,20 @@ onMounted(() => {
         :applied-filters="appliedFilters"
         @toggle-compare="toggleCompare"
       />
-      <ComparePanel :selected-products="selectedProducts" />
+      <ComparePanel
+        :selected-products="selectedProducts"
+        :result="compareResult"
+        :loading="compareLoading"
+        :error-message="compareErrorMessage"
+      />
     </section>
 
-    <FaqPanel :entries="mockFaqEntries" />
+    <FaqPanel
+      :suggested-questions="suggestedFaqQuestions"
+      :result="faqResult"
+      :loading="faqLoading"
+      :error-message="faqErrorMessage"
+      @submit="submitFaq"
+    />
   </main>
 </template>

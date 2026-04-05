@@ -3,5 +3,6 @@ export type FaqEntry = {
   topic: string;
   question: string;
   answer: string;
-  sourceLabel: string;
+  source_label: string;
+  keywords: string[];
 };

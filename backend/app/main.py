@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.catalog.router import router as catalog_router
+from app.compare.router import router as compare_router
 from app.config import settings
+from app.faq.router import router as faq_router
 
 
 app = FastAPI(
@@ -20,6 +22,8 @@ app.add_middleware(
 )
 
 app.include_router(catalog_router)
+app.include_router(compare_router)
+app.include_router(faq_router)
 
 
 @app.get("/health")

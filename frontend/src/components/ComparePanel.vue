@@ -1,22 +1,13 @@
 <script setup lang="ts">
-import { computed } from "vue";
-
+import type { CompareResponse } from "../api/contracts/compare";
 import type { Product } from "../types/catalog";
 
-const props = defineProps<{
+defineProps<{
   selectedProducts: Product[];
+  result: CompareResponse | null;
+  loading: boolean;
+  errorMessage: string;
 }>();
-
-const comparisonSummary = computed(() => {
-  if (props.selectedProducts.length < 2) {
-    return "至少选择 2 个商品后，这里会给出价格差异、适用人群和购买建议。下一轮我们会把它迁到后端接口。";
-  }
-
-  const cheapest = [...props.selectedProducts].sort((a, b) => a.price - b.price)[0];
-  const expensive = [...props.selectedProducts].sort((a, b) => b.price - a.price)[0];
-
-  return `当前对比中，${cheapest.name} 的参考价更低，${expensive.name} 的定位更高。后续这里会接真实对比接口，并明确区分“数据事实”和“AI 总结”。`;
-});
 </script>
 
 <template>
@@ -25,8 +16,8 @@ const comparisonSummary = computed(() => {
       <div>
         <h2 class="panel-title">商品对比区</h2>
         <p class="muted-copy mt-2">
-          这一块暂时还保留前端演示逻辑。它的意义是先把“选中商品 -> 生成对比结论”的业务链路摆出来，
-          下一轮再迁到后端接口。
+          这一块现在已经接入真实后端接口。它和商品搜索、FAQ 一样，都是后续 Agent
+          可以直接调用的业务工具。当前总结内容仍由后端规则逻辑生成，还没有交给模型。
         </p>
       </div>
       <span class="chip bg-slate-100 text-slate-700">已选 {{ selectedProducts.length }} 件</span>
@@ -54,8 +45,17 @@ const comparisonSummary = computed(() => {
       </div>
     </div>
 
-    <div class="mt-6 rounded-3xl bg-amber-50 p-5 text-sm leading-7 text-amber-900">
-      {{ comparisonSummary }}
+    <p v-if="loading" class="mt-6 text-sm text-slate-600">正在生成商品对比结果...</p>
+    <p v-else-if="errorMessage" class="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      商品对比失败：{{ errorMessage }}
+    </p>
+
+    <div v-else-if="result" class="mt-6 space-y-4 rounded-3xl bg-amber-50 p-5 text-sm leading-7 text-amber-900">
+      <p>{{ result.summary }}</p>
+
+      <ul class="space-y-2">
+        <li v-for="item in result.highlights" :key="item">• {{ item }}</li>
+      </ul>
     </div>
   </section>
 </template>
