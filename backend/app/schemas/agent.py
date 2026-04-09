@@ -42,6 +42,15 @@ class AgentToolCall(BaseModel):
     output_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentProviders(BaseModel):
+    """Agent 各阶段来源信息。"""
+
+    route_provider: str = ""
+    intent_provider: str = ""
+    answer_provider: str = ""
+    retrieval_provider: str = ""
+
+
 class AgentChatRequest(BaseModel):
     """Agent 对话请求。"""
 
@@ -66,6 +75,7 @@ class AgentChatResponse(BaseModel):
     recommended_product_ids: list[str] = Field(default_factory=list)
     faq_result: FaqAskResponse | None = None
     compare_result: CompareResponse | None = None
+    providers: AgentProviders = Field(default_factory=AgentProviders)
     provider: str
     model: str
     graph_runtime: str
@@ -89,6 +99,7 @@ class AgentRunDetailResponse(BaseModel):
     recommended_product_ids: list[str] = Field(default_factory=list)
     faq_result: FaqAskResponse | None = None
     compare_result: CompareResponse | None = None
+    providers: AgentProviders = Field(default_factory=AgentProviders)
     provider: str
     model: str
     graph_runtime: str

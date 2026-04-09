@@ -165,15 +165,22 @@ def seed_database_if_empty() -> None:
 
     assert select is not None
     with session_scope() as session:
-        has_products = session.scalar(select(ProductRecord.id).limit(1)) is not None
-        has_faq = session.scalar(select(FaqEntryRecord.id).limit(1)) is not None
+        existing_product_ids = set(session.scalars(select(ProductRecord.id)).all())
+        existing_faq_ids = set(session.scalars(select(FaqEntryRecord.id)).all())
 
-        if not has_products:
-            session.add_all(_product_to_record(product) for product in load_seed_products())
-        if not has_faq:
-            session.add_all(_faq_to_record(entry) for entry in load_seed_faq_entries())
+        missing_products = [
+            product for product in load_seed_products() if product.id not in existing_product_ids
+        ]
+        missing_faq_entries = [
+            entry for entry in load_seed_faq_entries() if entry.id not in existing_faq_ids
+        ]
 
-        if not has_products or not has_faq:
+        if missing_products:
+            session.add_all(_product_to_record(product) for product in missing_products)
+        if missing_faq_entries:
+            session.add_all(_faq_to_record(entry) for entry in missing_faq_entries)
+
+        if missing_products or missing_faq_entries:
             session.commit()
 
 
@@ -202,6 +209,7 @@ def persist_agent_run(payload: dict[str, object]) -> str:
                 parsed_intent_json=json.dumps(payload.get("parsed_intent"), ensure_ascii=False),
                 faq_result_json=json.dumps(payload.get("faq_result"), ensure_ascii=False),
                 compare_result_json=json.dumps(payload.get("compare_result"), ensure_ascii=False),
+                providers_json=json.dumps(payload.get("providers", {}), ensure_ascii=False),
                 provider=str(payload.get("provider", "")),
                 model=str(payload.get("model", "")),
                 graph_runtime=str(payload.get("graph_runtime", "")),
@@ -219,6 +227,15 @@ def _deserialize_json_field(raw_value: str | None) -> object:
 
 
 def _agent_run_row_to_payload(row: AgentRunRecord) -> dict[str, object]:
+    providers = _deserialize_json_field(row.providers_json)
+    if not isinstance(providers, dict):
+        providers = {
+            "route_provider": "",
+            "intent_provider": "",
+            "answer_provider": row.provider,
+            "retrieval_provider": "",
+        }
+
     return {
         "run_id": row.id,
         "created_at": row.created_at,
@@ -233,6 +250,7 @@ def _agent_run_row_to_payload(row: AgentRunRecord) -> dict[str, object]:
         "parsed_intent": _deserialize_json_field(row.parsed_intent_json),
         "faq_result": _deserialize_json_field(row.faq_result_json),
         "compare_result": _deserialize_json_field(row.compare_result_json),
+        "providers": providers,
         "provider": row.provider,
         "model": row.model,
         "graph_runtime": row.graph_runtime,
@@ -250,19 +268,38 @@ def ensure_agent_run_schema() -> None:
     engine = get_engine()
     columns = {column["name"] for column in inspect(engine).get_columns("agent_runs")}
 
-    if "created_at" in columns:
-        return
-
     with session_scope() as session:
-        session.execute(text("ALTER TABLE agent_runs ADD COLUMN created_at TEXT"))
-        session.execute(
-            text(
-                "UPDATE agent_runs "
-                "SET created_at = :created_at "
-                "WHERE created_at IS NULL OR created_at = ''"
-            ),
-            {"created_at": datetime.now(UTC).isoformat()},
-        )
+        if "created_at" not in columns:
+            session.execute(text("ALTER TABLE agent_runs ADD COLUMN created_at TEXT"))
+            session.execute(
+                text(
+                    "UPDATE agent_runs "
+                    "SET created_at = :created_at "
+                    "WHERE created_at IS NULL OR created_at = ''"
+                ),
+                {"created_at": datetime.now(UTC).isoformat()},
+            )
+
+        if "providers_json" not in columns:
+            session.execute(text("ALTER TABLE agent_runs ADD COLUMN providers_json TEXT"))
+            session.execute(
+                text(
+                    "UPDATE agent_runs "
+                    "SET providers_json = :providers_json "
+                    "WHERE providers_json IS NULL OR providers_json = ''"
+                ),
+                {
+                    "providers_json": json.dumps(
+                        {
+                            "route_provider": "",
+                            "intent_provider": "",
+                            "answer_provider": "",
+                            "retrieval_provider": "",
+                        },
+                        ensure_ascii=False,
+                    )
+                },
+            )
         session.commit()
 
 

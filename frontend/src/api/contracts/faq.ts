@@ -24,4 +24,24 @@ export type FaqAskResponse = {
   suggestions: string[];
   citations: FaqCitationResponse[];
   retrieval_mode: string;
+  retrieval_provider: string;
+  answer_provider: string;
+};
+
+export type FaqEntryListResponse = {
+  backend: string;
+  items: FaqEntryResponse[];
+};
+
+export type FaqDeleteResponse = {
+  deleted: boolean;
+  entry_id: string;
+};
+
+export type FaqEntryImportResponse = {
+  mode: "upsert" | "replace";
+  imported_count: number;
+  created_count: number;
+  updated_count: number;
+  backend: string;
 };

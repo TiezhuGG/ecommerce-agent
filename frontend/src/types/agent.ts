@@ -31,6 +31,13 @@ export type AgentToolCall = {
   outputPayload: Record<string, unknown>;
 };
 
+export type AgentProviders = {
+  routeProvider: string;
+  intentProvider: string;
+  answerProvider: string;
+  retrievalProvider: string;
+};
+
 export type AgentPrecheck = {
   status: string;
   summary: string;
@@ -60,6 +67,7 @@ export type AgentResult = {
   recommendedProductIds: string[];
   faqResult: FaqAskResult | null;
   compareResult: CompareResponse | null;
+  providers: AgentProviders;
   provider: string;
   model: string;
   graphRuntime: string;
@@ -77,6 +85,7 @@ export type AgentRunSummary = {
   toolCallCount: number;
   selectedProductIds: string[];
   recommendedProductIds: string[];
+  providers: AgentProviders;
   provider: string;
   model: string;
 };

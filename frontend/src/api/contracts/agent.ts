@@ -32,6 +32,13 @@ export type AgentToolCallResponse = {
   output_payload: Record<string, unknown>;
 };
 
+export type AgentProvidersResponse = {
+  route_provider: string;
+  intent_provider: string;
+  answer_provider: string;
+  retrieval_provider: string;
+};
+
 export type AgentChatResponse = {
   message: string;
   selected_product_ids: string[];
@@ -44,6 +51,7 @@ export type AgentChatResponse = {
   recommended_product_ids: string[];
   faq_result: FaqAskResponse | null;
   compare_result: CompareResponse | null;
+  providers: AgentProvidersResponse;
   provider: string;
   model: string;
   graph_runtime: string;
@@ -65,6 +73,7 @@ export type AgentRunDetailResponse = {
   recommended_product_ids: string[];
   faq_result: FaqAskResponse | null;
   compare_result: CompareResponse | null;
+  providers: AgentProvidersResponse;
   provider: string;
   model: string;
   graph_runtime: string;

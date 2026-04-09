@@ -24,4 +24,30 @@ export type FaqAskResult = {
   suggestions: string[];
   citations: FaqCitation[];
   retrievalMode: string;
+  retrievalProvider: string;
+  answerProvider: string;
+};
+
+export type FaqEntryInput = {
+  topic: string;
+  question: string;
+  answer: string;
+  sourceLabel: string;
+  keywords: string[];
+  body: string;
+};
+
+export type FaqEntryListResult = {
+  backend: string;
+  items: FaqEntry[];
+};
+
+export type FaqImportMode = "upsert" | "replace";
+
+export type FaqEntryImportResult = {
+  mode: FaqImportMode;
+  importedCount: number;
+  createdCount: number;
+  updatedCount: number;
+  backend: string;
 };

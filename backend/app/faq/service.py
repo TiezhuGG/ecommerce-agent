@@ -1,15 +1,41 @@
 from __future__ import annotations
 
+import json
 import re
+import uuid
 from dataclasses import dataclass
 
+from app.db.models import FaqEntryRecord
+from app.db.service import DatabaseUnavailableError, SQLAlchemyError, faq_from_record, session_scope
 from app.db.repositories import get_repositories
 from app.llm.service import (
     LLMRequestError,
     LLMServiceUnavailableError,
     request_text,
 )
-from app.schemas.faq import FaqAskResponse, FaqCitation, FaqEntry
+from app.schemas.faq import (
+    FaqAskResponse,
+    FaqCitation,
+    FaqDeleteResponse,
+    FaqEntry,
+    FaqEntryImportItem,
+    FaqEntryImportRequest,
+    FaqEntryImportResponse,
+    FaqEntryListResponse,
+    FaqEntryUpsertRequest,
+)
+
+
+class FaqAdminUnavailableError(RuntimeError):
+    """知识库管理当前不可用。"""
+
+
+class FaqEntryNotFoundError(RuntimeError):
+    """指定知识库条目不存在。"""
+
+
+class FaqImportValidationError(RuntimeError):
+    """知识库导入数据不合法。"""
 
 
 @dataclass(slots=True)
@@ -139,7 +165,7 @@ def _build_fallback_answer(
     )
 
 
-def _generate_answer_with_llm(question: str, citations: list[FaqCitation]) -> str:
+def _generate_answer_with_llm(question: str, citations: list[FaqCitation]):
     citation_text = "\n\n".join(
         (
             f"片段 {index + 1}\n"
@@ -162,7 +188,7 @@ def _generate_answer_with_llm(question: str, citations: list[FaqCitation]) -> st
             "请输出一段简洁中文回答，优先给出结论，再补一句必要说明。"
         ),
     )
-    return result.text
+    return result
 
 
 def ask_faq(question: str) -> FaqAskResponse:
@@ -178,12 +204,17 @@ def ask_faq(question: str) -> FaqAskResponse:
             suggestions=_build_suggestions(None),
             citations=[],
             retrieval_mode="knowledge-rag-v1",
+            retrieval_provider="knowledge-rag-v1-local-retrieval",
+            answer_provider="knowledge-rag-v1-no-match",
         )
 
     try:
-        answer = _generate_answer_with_llm(question, citations)
+        llm_result = _generate_answer_with_llm(question, citations)
+        answer = llm_result.text
+        answer_provider = f"{llm_result.provider} / {llm_result.strategy}"
     except (LLMServiceUnavailableError, LLMRequestError):
         answer = _build_fallback_answer(question, citations, matched_entry)
+        answer_provider = "knowledge-rag-v1-fallback"
 
     return FaqAskResponse(
         question=question,
@@ -193,4 +224,217 @@ def ask_faq(question: str) -> FaqAskResponse:
         suggestions=_build_suggestions(matched_entry),
         citations=citations,
         retrieval_mode="knowledge-rag-v1",
+        retrieval_provider="knowledge-rag-v1-local-retrieval",
+        answer_provider=answer_provider,
+    )
+
+
+def _require_faq_admin_backend() -> str:
+    backend = get_repositories().backend
+    if not backend.startswith("sqlalchemy-"):
+        raise FaqAdminUnavailableError("当前未启用数据库知识库存储，无法管理知识文档。")
+    if FaqEntryRecord is None:
+        raise FaqAdminUnavailableError("当前数据库知识库模型不可用。")
+    return backend
+
+
+def _normalize_keywords(keywords: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in keywords:
+        value = item.strip()
+        if not value:
+            continue
+        lowered = value.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized.append(value)
+    return normalized
+
+
+def _build_entry_model(entry_id: str, payload: FaqEntryUpsertRequest) -> FaqEntry:
+    return FaqEntry(
+        id=entry_id,
+        topic=payload.topic.strip(),
+        question=payload.question.strip(),
+        answer=payload.answer.strip(),
+        source_label=payload.source_label.strip(),
+        keywords=_normalize_keywords(payload.keywords),
+        body=payload.body.strip(),
+    )
+
+
+def _build_entry_from_import_item(item: FaqEntryImportItem) -> FaqEntry:
+    entry_id = (item.id or "").strip() or f"kb-{uuid.uuid4().hex[:12]}"
+    return FaqEntry(
+        id=entry_id,
+        topic=item.topic.strip(),
+        question=item.question.strip(),
+        answer=item.answer.strip(),
+        source_label=item.source_label.strip(),
+        keywords=_normalize_keywords(item.keywords),
+        body=item.body.strip(),
+    )
+
+
+def list_faq_entries_admin() -> FaqEntryListResponse:
+    backend = _require_faq_admin_backend()
+
+    try:
+        with session_scope() as session:
+            rows = (
+                session.query(FaqEntryRecord)
+                .order_by(FaqEntryRecord.topic.asc(), FaqEntryRecord.question.asc())
+                .all()
+            )
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise FaqAdminUnavailableError(f"当前无法读取知识库条目：{exc}") from exc
+
+    return FaqEntryListResponse(
+        backend=backend,
+        items=[faq_from_record(row) for row in rows],
+    )
+
+
+def create_faq_entry(payload: FaqEntryUpsertRequest) -> FaqEntry:
+    _require_faq_admin_backend()
+    entry_id = f"kb-{uuid.uuid4().hex[:12]}"
+    entry = _build_entry_model(entry_id, payload)
+
+    try:
+        with session_scope() as session:
+            session.add(
+                FaqEntryRecord(
+                    id=entry.id,
+                    topic=entry.topic,
+                    question=entry.question,
+                    answer=entry.answer,
+                    source_label=entry.source_label,
+                    keywords_json=json.dumps(entry.keywords, ensure_ascii=False),
+                    body=entry.body,
+                )
+            )
+            session.commit()
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise FaqAdminUnavailableError(f"当前无法新增知识库条目：{exc}") from exc
+
+    return entry
+
+
+def update_faq_entry(entry_id: str, payload: FaqEntryUpsertRequest) -> FaqEntry:
+    _require_faq_admin_backend()
+    entry = _build_entry_model(entry_id, payload)
+
+    try:
+        with session_scope() as session:
+            row = session.get(FaqEntryRecord, entry_id)
+            if row is None:
+                raise FaqEntryNotFoundError(f"未找到 entry_id={entry_id} 对应的知识库条目。")
+
+            row.topic = entry.topic
+            row.question = entry.question
+            row.answer = entry.answer
+            row.source_label = entry.source_label
+            row.keywords_json = json.dumps(entry.keywords, ensure_ascii=False)
+            row.body = entry.body
+            session.commit()
+    except FaqEntryNotFoundError:
+        raise
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise FaqAdminUnavailableError(f"当前无法更新知识库条目：{exc}") from exc
+
+    return entry
+
+
+def delete_faq_entry(entry_id: str) -> FaqDeleteResponse:
+    _require_faq_admin_backend()
+
+    try:
+        with session_scope() as session:
+            row = session.get(FaqEntryRecord, entry_id)
+            if row is None:
+                raise FaqEntryNotFoundError(f"未找到 entry_id={entry_id} 对应的知识库条目。")
+            session.delete(row)
+            session.commit()
+    except FaqEntryNotFoundError:
+        raise
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise FaqAdminUnavailableError(f"当前无法删除知识库条目：{exc}") from exc
+
+    return FaqDeleteResponse(entry_id=entry_id)
+
+
+def export_faq_entries() -> FaqEntryListResponse:
+    return list_faq_entries_admin()
+
+
+def import_faq_entries(payload: FaqEntryImportRequest) -> FaqEntryImportResponse:
+    backend = _require_faq_admin_backend()
+    mode = payload.mode.strip().lower() or "upsert"
+    if mode not in {"upsert", "replace"}:
+        raise FaqImportValidationError("导入模式仅支持 upsert 或 replace。")
+    if not payload.items:
+        raise FaqImportValidationError("导入内容不能为空。")
+
+    entries = [_build_entry_from_import_item(item) for item in payload.items]
+    duplicate_ids = {entry.id for entry in entries if sum(1 for current in entries if current.id == entry.id) > 1}
+    if duplicate_ids:
+        raise FaqImportValidationError(f"导入数据存在重复 entry_id：{', '.join(sorted(duplicate_ids))}")
+
+    created_count = 0
+    updated_count = 0
+
+    try:
+        with session_scope() as session:
+            if mode == "replace":
+                session.query(FaqEntryRecord).delete()
+                for entry in entries:
+                    session.add(
+                        FaqEntryRecord(
+                            id=entry.id,
+                            topic=entry.topic,
+                            question=entry.question,
+                            answer=entry.answer,
+                            source_label=entry.source_label,
+                            keywords_json=json.dumps(entry.keywords, ensure_ascii=False),
+                            body=entry.body,
+                        )
+                    )
+                created_count = len(entries)
+                session.commit()
+            else:
+                for entry in entries:
+                    row = session.get(FaqEntryRecord, entry.id)
+                    if row is None:
+                        session.add(
+                            FaqEntryRecord(
+                                id=entry.id,
+                                topic=entry.topic,
+                                question=entry.question,
+                                answer=entry.answer,
+                                source_label=entry.source_label,
+                                keywords_json=json.dumps(entry.keywords, ensure_ascii=False),
+                                body=entry.body,
+                            )
+                        )
+                        created_count += 1
+                    else:
+                        row.topic = entry.topic
+                        row.question = entry.question
+                        row.answer = entry.answer
+                        row.source_label = entry.source_label
+                        row.keywords_json = json.dumps(entry.keywords, ensure_ascii=False)
+                        row.body = entry.body
+                        updated_count += 1
+                session.commit()
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise FaqAdminUnavailableError(f"当前无法导入知识库条目：{exc}") from exc
+
+    return FaqEntryImportResponse(
+        mode=mode,
+        imported_count=len(entries),
+        created_count=created_count,
+        updated_count=updated_count,
+        backend=backend,
     )

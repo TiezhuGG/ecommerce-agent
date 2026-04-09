@@ -46,73 +46,78 @@ const emit = defineEmits<{
       商品搜索失败：{{ errorMessage }}
     </p>
 
-    <div v-else-if="products.length" class="mt-6 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-      <article
-        v-for="product in products"
-        :key="product.id"
-        class="rounded-3xl border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-lg"
-        :class="
-          recommendedIds.includes(product.id)
-            ? 'border-amber-300 shadow-[0_18px_40px_rgba(245,158,11,0.14)]'
-            : 'border-slate-200'
-        "
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="text-sm font-medium text-amber-700">{{ product.category }}</p>
-              <span
-                v-if="recommendedIds.includes(product.id)"
-                class="chip bg-amber-100 text-amber-800"
-              >
-                Agent 推荐
-              </span>
+    <div
+      v-else-if="products.length"
+      class="mt-6 max-h-[920px] overflow-y-auto pr-2 sm:max-h-[760px] 2xl:max-h-[720px]"
+    >
+      <div class="grid gap-4 sm:grid-cols-2">
+        <article
+          v-for="product in products"
+          :key="product.id"
+          class="rounded-3xl border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-lg"
+          :class="
+            recommendedIds.includes(product.id)
+              ? 'border-amber-300 shadow-[0_18px_40px_rgba(245,158,11,0.14)]'
+              : 'border-slate-200'
+          "
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-sm font-medium text-amber-700">{{ product.category }}</p>
+                <span
+                  v-if="recommendedIds.includes(product.id)"
+                  class="chip bg-amber-100 text-amber-800"
+                >
+                  Agent 推荐
+                </span>
+              </div>
+              <h3 class="mt-2 text-lg font-semibold text-slate-900">{{ product.name }}</h3>
             </div>
-            <h3 class="mt-2 text-lg font-semibold text-slate-900">{{ product.name }}</h3>
+            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+              {{ product.brand }}
+            </span>
           </div>
-          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-            {{ product.brand }}
-          </span>
-        </div>
 
-        <p class="mt-4 text-3xl font-semibold text-slate-900">￥{{ product.price }}</p>
-        <p class="mt-1 text-xs text-slate-500">{{ product.price_note }}</p>
-        <p class="mt-3 text-sm leading-7 text-slate-600">{{ product.summary }}</p>
-        <p class="mt-3 text-sm text-slate-500">适用场景：{{ product.scenario }}</p>
+          <p class="mt-4 text-3xl font-semibold text-slate-900">￥{{ product.price }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ product.price_note }}</p>
+          <p class="mt-3 text-sm leading-7 text-slate-600">{{ product.summary }}</p>
+          <p class="mt-3 text-sm text-slate-500">适用场景：{{ product.scenario }}</p>
 
-        <div class="mt-4 flex flex-wrap gap-2">
-          <span
-            v-for="tag in product.tags"
-            :key="tag"
-            class="chip bg-amber-100 text-amber-800"
-          >
-            {{ tag }}
-          </span>
-        </div>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <span
+              v-for="tag in product.tags"
+              :key="tag"
+              class="chip bg-amber-100 text-amber-800"
+            >
+              {{ tag }}
+            </span>
+          </div>
 
-        <ul class="mt-5 space-y-2 text-sm text-slate-600">
-          <li v-for="spec in product.specs" :key="spec">- {{ spec }}</li>
-        </ul>
+          <ul class="mt-5 space-y-2 text-sm text-slate-600">
+            <li v-for="spec in product.specs" :key="spec">- {{ spec }}</li>
+          </ul>
 
-        <div class="mt-5 grid gap-3">
-          <button
-            type="button"
-            class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
-            @click="emit('toggleCompare', product.id)"
-          >
-            {{ selectedIds.includes(product.id) ? "移出对比" : "加入对比" }}
-          </button>
+          <div class="mt-5 grid gap-3">
+            <button
+              type="button"
+              class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
+              @click="emit('toggleCompare', product.id)"
+            >
+              {{ selectedIds.includes(product.id) ? "移出对比" : "加入对比" }}
+            </button>
 
-          <a
-            :href="product.official_url"
-            target="_blank"
-            rel="noreferrer"
-            class="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-          >
-            查看官方页面
-          </a>
-        </div>
-      </article>
+            <a
+              :href="product.official_url"
+              target="_blank"
+              rel="noreferrer"
+              class="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              查看官方页面
+            </a>
+          </div>
+        </article>
+      </div>
     </div>
 
     <div

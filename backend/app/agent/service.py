@@ -31,6 +31,7 @@ from app.llm.service import (
 )
 from app.schemas.agent import (
     AgentChatResponse,
+    AgentProviders,
     AgentRunDetailResponse,
     AgentRunListResponse,
     AgentRunSummary,
@@ -76,6 +77,10 @@ class AgentGraphState(TypedDict, total=False):
     faq_result: FaqAskResponse | None
     compare_result: CompareResponse | None
     final_answer: str
+    route_provider: str
+    intent_provider: str
+    answer_provider: str
+    retrieval_provider: str
     provider: str
 
 
@@ -224,11 +229,33 @@ def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
         else [],
         faq_result=row["faq_result"] if isinstance(row.get("faq_result"), dict) else None,
         compare_result=row["compare_result"] if isinstance(row.get("compare_result"), dict) else None,
+        providers=AgentProviders(**row["providers"]) if isinstance(row.get("providers"), dict) else AgentProviders(),
         provider=str(row["provider"]),
         model=str(row["model"]),
         graph_runtime=str(row.get("graph_runtime", "langgraph")),
         persisted=True,
     )
+
+
+def _snapshot_providers(state: AgentGraphState) -> AgentProviders:
+    return AgentProviders(
+        route_provider=state.get("route_provider", ""),
+        intent_provider=state.get("intent_provider", ""),
+        answer_provider=state.get("answer_provider", ""),
+        retrieval_provider=state.get("retrieval_provider", ""),
+    )
+
+
+def _summarize_provider(providers: AgentProviders) -> str:
+    for value in (
+        providers.answer_provider,
+        providers.intent_provider,
+        providers.route_provider,
+        providers.retrieval_provider,
+    ):
+        if value:
+            return value
+    return "未知"
 
 
 def _append_tool_call(
@@ -347,6 +374,7 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
     if route:
         state["route"] = route
         state["route_reasoning"] = reasoning
+        state["route_provider"] = "规则路由"
         state["provider"] = "规则路由"
         _append_tool_call(
             state,
@@ -362,6 +390,7 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
         llm_route, llm_reasoning, provider = _classify_route_with_llm(message)
         state["route"] = llm_route
         state["route_reasoning"] = llm_reasoning
+        state["route_provider"] = provider
         state["provider"] = provider
         _append_tool_call(
             state,
@@ -375,6 +404,7 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
     except (LLMServiceUnavailableError, LLMRequestError) as exc:
         state["route"] = "shopping"
         state["route_reasoning"] = "路由分类器不可用，默认进入导购搜索流程。"
+        state["route_provider"] = "规则降级"
         state["provider"] = "规则降级"
         _append_warning(state, f"路由分类失败，已默认进入导购流程：{exc}")
         _append_tool_call(
@@ -397,6 +427,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
     try:
         parsed_intent = parse_intent(message)
         state["parsed_intent"] = parsed_intent
+        state["intent_provider"] = parsed_intent.provider
         intent_summary = "已将自然语言导购需求解析为结构化筛选条件。"
         if "fallback" in parsed_intent.provider.lower():
             intent_summary = "模型不可用，已退回本地规则提取结构化筛选条件。"
@@ -416,6 +447,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
             max_price=parsed_intent.search_filters.max_price,
         )
     except (IntentServiceUnavailableError, IntentParseError) as exc:
+        state["intent_provider"] = "intent-keyword-fallback"
         _append_warning(state, f"意图解析失败，已退化为关键词搜索：{exc}")
         _append_tool_call(
             state,
@@ -485,6 +517,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
 
     top_products = product_result.items[:3]
     if not top_products:
+        state["answer_provider"] = "shopping-no-results"
         state["final_answer"] = "当前没有找到符合条件的商品。你可以放宽预算、品牌或分类条件后再试一次。"
         return state
 
@@ -508,11 +541,11 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
             ),
         )
         state["final_answer"] = answer.text
-        if state.get("provider") in {"规则路由", "规则降级"}:
-            state["provider"] = answer.provider
+        state["answer_provider"] = f"{answer.provider} / {answer.strategy}"
     except (LLMServiceUnavailableError, LLMRequestError) as exc:
         _append_warning(state, f"导购总结生成失败，已使用模板回复：{exc}")
         names = "、".join(product.name for product in top_products)
+        state["answer_provider"] = "shopping-template-fallback"
         state["final_answer"] = (
             f"我先根据你的需求筛出了 {product_result.total} 个候选商品。"
             f"当前更值得优先查看的是：{names}。"
@@ -542,6 +575,8 @@ def _faq_node(state: AgentGraphState) -> AgentGraphState:
 
     result = ask_faq(state["message"])
     state["faq_result"] = result
+    state["retrieval_provider"] = result.retrieval_provider
+    state["answer_provider"] = result.answer_provider
     state["final_answer"] = result.answer
 
     _append_tool_call(
@@ -553,6 +588,8 @@ def _faq_node(state: AgentGraphState) -> AgentGraphState:
         output_payload={
             "source_label": result.source_label,
             "retrieval_mode": result.retrieval_mode,
+            "retrieval_provider": result.retrieval_provider,
+            "answer_provider": result.answer_provider,
             "citations": _serialize_citations(result.citations),
         },
     )
@@ -582,6 +619,7 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
     candidate_ids = list(dict.fromkeys(candidate_ids))[:3]
 
     if len(candidate_ids) < 2:
+        state["answer_provider"] = "compare-needs-more-products"
         _append_warning(state, "当前进入了商品对比流程，但还没有足够的商品可比。")
         _append_tool_call(
             state,
@@ -597,6 +635,7 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
     result = compare_products(candidate_ids)
     state["compare_result"] = result
     state["recommended_product_ids"] = [product.id for product in result.compared_products]
+    state["answer_provider"] = "compare-rule-engine"
     state["final_answer"] = result.summary
     _append_tool_call(
         state,
@@ -703,6 +742,7 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
     except Exception as exc:
         raise AgentExecutionError(f"运行 LangGraph Agent 失败：{exc}") from exc
 
+    providers = _snapshot_providers(state)
     response = AgentChatResponse(
         message=message.strip(),
         selected_product_ids=list(selected_product_ids),
@@ -715,7 +755,8 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
         recommended_product_ids=state.get("recommended_product_ids", []),
         faq_result=state.get("faq_result"),
         compare_result=state.get("compare_result"),
-        provider=state.get("provider", "未知"),
+        providers=providers,
+        provider=_summarize_provider(providers),
         model=settings.openai_model,
         graph_runtime="langgraph",
     )
@@ -736,6 +777,7 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
                     "parsed_intent": response.parsed_intent.model_dump() if response.parsed_intent else None,
                     "faq_result": response.faq_result.model_dump() if response.faq_result else None,
                     "compare_result": response.compare_result.model_dump() if response.compare_result else None,
+                    "providers": response.providers.model_dump(),
                     "provider": response.provider,
                     "model": response.model,
                     "graph_runtime": response.graph_runtime,

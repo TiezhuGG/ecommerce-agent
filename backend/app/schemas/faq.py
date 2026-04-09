@@ -43,3 +43,59 @@ class FaqAskResponse(BaseModel):
     suggestions: list[str]
     citations: list[FaqCitation] = Field(default_factory=list)
     retrieval_mode: str = Field(default="knowledge-rag-v1")
+    retrieval_provider: str = Field(default="knowledge-rag-v1-local-retrieval")
+    answer_provider: str = Field(default="")
+
+
+class FaqEntryListResponse(BaseModel):
+    """知识库条目列表。"""
+
+    backend: str
+    items: list[FaqEntry] = Field(default_factory=list)
+
+
+class FaqEntryUpsertRequest(BaseModel):
+    """知识库条目新增/更新请求。"""
+
+    topic: str = Field(..., min_length=1, description="所属主题")
+    question: str = Field(..., min_length=1, description="标准问题标题")
+    answer: str = Field(..., min_length=1, description="标准短答案")
+    source_label: str = Field(..., min_length=1, description="来源标签")
+    keywords: list[str] = Field(default_factory=list, description="检索关键词")
+    body: str = Field(default="", description="知识正文")
+
+
+class FaqDeleteResponse(BaseModel):
+    """知识库条目删除响应。"""
+
+    deleted: bool = True
+    entry_id: str
+
+
+class FaqEntryImportItem(BaseModel):
+    """导入用知识库条目。"""
+
+    id: str | None = Field(default=None, description="知识文档 ID，可为空")
+    topic: str = Field(..., min_length=1, description="所属主题")
+    question: str = Field(..., min_length=1, description="标准问题标题")
+    answer: str = Field(..., min_length=1, description="标准短答案")
+    source_label: str = Field(..., min_length=1, description="来源标签")
+    keywords: list[str] = Field(default_factory=list, description="检索关键词")
+    body: str = Field(default="", description="知识正文")
+
+
+class FaqEntryImportRequest(BaseModel):
+    """知识库导入请求。"""
+
+    mode: str = Field(default="upsert", description="支持 upsert 或 replace")
+    items: list[FaqEntryImportItem] = Field(default_factory=list, description="待导入条目")
+
+
+class FaqEntryImportResponse(BaseModel):
+    """知识库导入响应。"""
+
+    mode: str
+    imported_count: int
+    created_count: int
+    updated_count: int
+    backend: str

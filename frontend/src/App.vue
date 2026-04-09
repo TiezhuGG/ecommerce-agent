@@ -18,6 +18,8 @@ import AgentRunHistoryCard from "./components/AgentRunHistoryCard.vue";
 import ComparePanel from "./components/ComparePanel.vue";
 import FaqPanel from "./components/FaqPanel.vue";
 import HealthStatusCard from "./components/HealthStatusCard.vue";
+import KnowledgeBaseAdminPanel from "./components/KnowledgeBaseAdminPanel.vue";
+import ProductCatalogAdminPanel from "./components/ProductCatalogAdminPanel.vue";
 import ProductGrid from "./components/ProductGrid.vue";
 import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
 import { suggestedFaqQuestions } from "./data/mockFaqEntries";
@@ -413,12 +415,17 @@ onMounted(() => {
       />
     </section>
 
-    <FaqPanel
-      :suggested-questions="suggestedFaqQuestions"
-      :result="faqResult"
-      :loading="faqLoading"
-      :error-message="faqErrorMessage"
-      @submit="submitFaq"
-    />
+    <section class="grid gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
+      <FaqPanel
+        :suggested-questions="suggestedFaqQuestions"
+        :result="faqResult"
+        :loading="faqLoading"
+        :error-message="faqErrorMessage"
+        @submit="submitFaq"
+      />
+      <KnowledgeBaseAdminPanel />
+    </section>
+
+    <ProductCatalogAdminPanel />
   </main>
 </template>

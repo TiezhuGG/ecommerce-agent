@@ -104,6 +104,12 @@ function submitFaq() {
             <span class="chip bg-violet-100 text-violet-800">
               检索模式：{{ result.retrievalMode }}
             </span>
+            <span class="chip bg-slate-100 text-slate-700">
+              检索来源：{{ result.retrievalProvider }}
+            </span>
+            <span class="chip bg-amber-100 text-amber-800">
+              回答来源：{{ result.answerProvider }}
+            </span>
             <span
               v-if="result.matchedEntry"
               class="chip bg-emerald-100 text-emerald-800"

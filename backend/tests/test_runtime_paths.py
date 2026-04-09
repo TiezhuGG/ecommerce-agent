@@ -11,10 +11,19 @@ if str(ROOT) not in sys.path:
 
 from app.agent.service import get_agent_run_detail, list_recent_agent_runs, run_agent_chat
 from app.config import settings
-from app.db.models import AgentRunRecord, ProductRecord
+from app.db.models import AgentRunRecord, FaqEntryRecord, ProductRecord
 from app.db.repositories import get_repositories
-from app.db.service import initialize_database, reset_db_runtime_state, session_scope
-from app.faq.service import ask_faq
+from app.db.service import initialize_database, reset_db_runtime_state, seed_database_if_empty, session_scope
+from app.faq.service import (
+    ask_faq,
+    create_faq_entry,
+    delete_faq_entry,
+    export_faq_entries,
+    import_faq_entries,
+    list_faq_entries_admin,
+    update_faq_entry,
+)
+from app.schemas.faq import FaqEntryImportItem, FaqEntryImportRequest, FaqEntryUpsertRequest
 from app.intent.service import parse_intent
 from app.llm.service import LLMServiceUnavailableError
 
@@ -84,6 +93,8 @@ class AgentRuntimeTests(unittest.TestCase):
         assert result.faq_result is not None
         titles = [citation.title for citation in result.faq_result.citations]
         self.assertEqual(len(result.faq_result.citations), len(set(titles)))
+        self.assertEqual(result.providers.retrieval_provider, "knowledge-rag-v1-local-retrieval")
+        self.assertTrue(result.providers.answer_provider)
 
     def test_agent_compare_route_still_returns_compare_summary(self) -> None:
         result = run_agent_chat("对比 Sony WF-1000XM5 和 Apple AirPods Pro (第 2 代)", [])
@@ -108,6 +119,7 @@ class AgentRuntimeTests(unittest.TestCase):
             result.selected_product_ids,
             ["earbuds-sony-wf1000xm5", "earbuds-apple-airpods-pro-2"],
         )
+        self.assertTrue(result.providers.route_provider)
 
     def test_agent_run_history_is_disabled_on_seed_backend(self) -> None:
         result = list_recent_agent_runs()
@@ -223,6 +235,112 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(detail.route, "faq")
         self.assertTrue(detail.persisted)
         self.assertGreaterEqual(len(detail.tool_calls), 1)
+        self.assertEqual(detail.providers.retrieval_provider, "knowledge-rag-v1-local-retrieval")
+
+    def test_seed_database_inserts_missing_faq_entries_into_existing_sqlite(self) -> None:
+        database_path = ROOT / ".tmp" / "test-seed-sync.db"
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        ok, _ = initialize_database()
+        self.assertTrue(ok)
+        assert FaqEntryRecord is not None
+
+        with session_scope() as session:
+            row = session.get(FaqEntryRecord, "kb-price-protect")
+            if row is not None:
+                session.delete(row)
+                session.commit()
+
+        seed_database_if_empty()
+
+        with session_scope() as session:
+            restored = session.get(FaqEntryRecord, "kb-price-protect")
+            self.assertIsNotNone(restored)
+
+    def test_faq_admin_crud_works_on_sqlite_backend(self) -> None:
+        database_path = ROOT / ".tmp" / "test-faq-admin.db"
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        ok, _ = initialize_database()
+        self.assertTrue(ok)
+
+        created = create_faq_entry(
+            FaqEntryUpsertRequest(
+                topic="活动",
+                question="测试条目可以新增吗？",
+                answer="可以，这是一条测试知识文档。",
+                source_label="测试来源",
+                keywords=["测试", "新增"],
+                body="这条文档用于验证 SQLite 下的知识库管理 CRUD。",
+            )
+        )
+
+        listed = list_faq_entries_admin()
+        self.assertTrue(any(item.id == created.id for item in listed.items))
+
+        updated = update_faq_entry(
+            created.id,
+            FaqEntryUpsertRequest(
+                topic="活动",
+                question="测试条目可以更新吗？",
+                answer="可以，这条测试文档已经更新。",
+                source_label="测试来源",
+                keywords=["测试", "更新"],
+                body="更新后的正文。",
+            ),
+        )
+        self.assertEqual(updated.question, "测试条目可以更新吗？")
+
+        deleted = delete_faq_entry(created.id)
+        self.assertTrue(deleted.deleted)
+
+        listed_after_delete = list_faq_entries_admin()
+        self.assertFalse(any(item.id == created.id for item in listed_after_delete.items))
+
+    def test_faq_admin_import_export_works_on_sqlite_backend(self) -> None:
+        database_path = ROOT / ".tmp" / "test-faq-import-export.db"
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        ok, _ = initialize_database()
+        self.assertTrue(ok)
+
+        exported = export_faq_entries()
+        self.assertGreater(len(exported.items), 0)
+
+        target = exported.items[0]
+        imported = import_faq_entries(
+            FaqEntryImportRequest(
+                mode="upsert",
+                items=[
+                    FaqEntryImportItem(
+                        id=target.id,
+                        topic=target.topic,
+                        question=target.question,
+                        answer="导入后的测试答案",
+                        source_label=target.source_label,
+                        keywords=target.keywords,
+                        body=target.body,
+                    )
+                ],
+            )
+        )
+        self.assertEqual(imported.updated_count, 1)
+
+        listed = list_faq_entries_admin()
+        updated = next(item for item in listed.items if item.id == target.id)
+        self.assertEqual(updated.answer, "导入后的测试答案")
 
 
 if __name__ == "__main__":

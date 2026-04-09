@@ -66,6 +66,7 @@ else:
         parsed_intent_json: Mapped[str] = mapped_column(Text, nullable=False)
         faq_result_json: Mapped[str] = mapped_column(Text, nullable=False)
         compare_result_json: Mapped[str] = mapped_column(Text, nullable=False)
+        providers_json: Mapped[str] = mapped_column(Text, nullable=False)
         provider: Mapped[str] = mapped_column(Text, nullable=False)
         model: Mapped[str] = mapped_column(Text, nullable=False)
         graph_runtime: Mapped[str] = mapped_column(Text, nullable=False)

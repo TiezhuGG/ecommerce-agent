@@ -1,5 +1,6 @@
 import type {
   AgentChatResponse,
+  AgentProvidersResponse,
   AgentRunDetailResponse,
   AgentPrecheckResponse,
   AgentRunListResponse,
@@ -11,6 +12,7 @@ import { requestJson } from "./client";
 import { mapFaqAskResponse } from "./faq";
 import type {
   AgentPrecheck,
+  AgentProviders,
   AgentRunHistory,
   AgentResult,
   AgentRunSummary,
@@ -40,6 +42,16 @@ function mapAgentToolCall(toolCall: AgentToolCallResponse): AgentToolCall {
 }
 
 
+function mapAgentProviders(providers: AgentProvidersResponse): AgentProviders {
+  return {
+    routeProvider: providers.route_provider,
+    intentProvider: providers.intent_provider,
+    answerProvider: providers.answer_provider,
+    retrievalProvider: providers.retrieval_provider,
+  };
+}
+
+
 function mapAgentRunSummary(item: AgentRunSummaryResponse): AgentRunSummary {
   return {
     runId: item.run_id,
@@ -51,6 +63,12 @@ function mapAgentRunSummary(item: AgentRunSummaryResponse): AgentRunSummary {
     toolCallCount: item.tool_call_count,
     selectedProductIds: item.selected_product_ids,
     recommendedProductIds: item.recommended_product_ids,
+    providers: {
+      routeProvider: "",
+      intentProvider: "",
+      answerProvider: item.provider,
+      retrievalProvider: "",
+    },
     provider: item.provider,
     model: item.model,
   };
@@ -110,6 +128,7 @@ function mapAgentResultFromResponse(
     recommendedProductIds: response.recommended_product_ids,
     faqResult: response.faq_result ? mapFaqAskResponse(response.faq_result) : null,
     compareResult: response.compare_result,
+    providers: mapAgentProviders(response.providers),
     provider: response.provider,
     model: response.model,
     graphRuntime: response.graph_runtime,

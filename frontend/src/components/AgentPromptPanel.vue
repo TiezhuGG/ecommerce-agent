@@ -108,6 +108,27 @@ function submitPrompt() {
           <p class="mt-2 text-sm leading-7 text-slate-700">{{ result.routeReasoning }}</p>
         </div>
 
+        <div class="mt-5">
+          <p class="text-sm font-semibold text-slate-700">阶段来源</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <span v-if="result.providers.routeProvider" class="chip bg-slate-100 text-slate-700">
+              route：{{ result.providers.routeProvider }}
+            </span>
+            <span v-if="result.providers.intentProvider" class="chip bg-sky-100 text-sky-800">
+              intent：{{ result.providers.intentProvider }}
+            </span>
+            <span v-if="result.providers.answerProvider" class="chip bg-amber-100 text-amber-800">
+              answer：{{ result.providers.answerProvider }}
+            </span>
+            <span
+              v-if="result.providers.retrievalProvider"
+              class="chip bg-violet-100 text-violet-800"
+            >
+              retrieval：{{ result.providers.retrievalProvider }}
+            </span>
+          </div>
+        </div>
+
         <div v-if="result.recommendedProductIds.length" class="mt-5">
           <p class="text-sm font-semibold text-slate-700">推荐商品 ID</p>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -202,6 +223,12 @@ function submitPrompt() {
           <span class="chip bg-sky-100 text-sky-800">知识库结果可同步</span>
           <span class="chip bg-violet-100 text-violet-800">
             {{ result.faqResult.retrievalMode }}
+          </span>
+          <span class="chip bg-slate-100 text-slate-700">
+            {{ result.faqResult.retrievalProvider }}
+          </span>
+          <span class="chip bg-amber-100 text-amber-800">
+            {{ result.faqResult.answerProvider }}
           </span>
           <span class="chip bg-emerald-100 text-emerald-800">
             {{ result.faqResult.sourceLabel }}
