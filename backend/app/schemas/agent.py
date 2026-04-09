@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.compare import CompareResponse
 from app.schemas.faq import FaqAskResponse
-from app.schemas.intent import IntentParseResponse
+from app.schemas.intent import IntentParseResponse, IntentSearchFilters
 
 
 class AgentToolStatus(BaseModel):
@@ -61,6 +61,18 @@ class AgentConversationTurn(BaseModel):
     recommended_product_ids: list[str] = Field(default_factory=list)
 
 
+class AgentThreadState(BaseModel):
+    """Recovered thread-level state for continuing a conversation."""
+
+    thread_id: str
+    last_run_id: str = ""
+    last_route: str = ""
+    search_filters: IntentSearchFilters | None = None
+    selected_product_ids: list[str] = Field(default_factory=list)
+    recommended_product_ids: list[str] = Field(default_factory=list)
+    candidate_product_ids: list[str] = Field(default_factory=list)
+
+
 class AgentChatRequest(BaseModel):
     """Agent chat request."""
 
@@ -86,6 +98,7 @@ class AgentChatResponse(BaseModel):
     thread_id: str
     selected_product_ids: list[str] = Field(default_factory=list)
     conversation_context: list[AgentConversationTurn] = Field(default_factory=list)
+    thread_state: AgentThreadState | None = None
     route: str
     route_reasoning: str
     final_answer: str
@@ -112,6 +125,7 @@ class AgentRunDetailResponse(BaseModel):
     message: str
     selected_product_ids: list[str] = Field(default_factory=list)
     conversation_context: list[AgentConversationTurn] = Field(default_factory=list)
+    thread_state: AgentThreadState | None = None
     route: str
     route_reasoning: str
     final_answer: str
@@ -149,4 +163,47 @@ class AgentRunListResponse(BaseModel):
     """Recent persisted agent runs."""
 
     backend: str
+    items: list[AgentRunSummary] = Field(default_factory=list)
+
+
+class AgentThreadSummary(BaseModel):
+    """Recent persisted agent thread summary."""
+
+    thread_id: str
+    latest_run_id: str
+    latest_created_at: str
+    latest_message: str
+    latest_route: str
+    latest_final_answer_preview: str
+    run_count: int
+    routes: list[str] = Field(default_factory=list)
+    selected_product_ids: list[str] = Field(default_factory=list)
+    recommended_product_ids: list[str] = Field(default_factory=list)
+    provider: str
+    model: str
+
+
+class AgentThreadListResponse(BaseModel):
+    """Recent persisted agent threads."""
+
+    backend: str
+    items: list[AgentThreadSummary] = Field(default_factory=list)
+
+
+class AgentThreadDetailResponse(BaseModel):
+    """Persisted agent thread detail with timeline runs."""
+
+    thread_id: str
+    latest_run_id: str
+    latest_created_at: str
+    latest_message: str
+    latest_route: str
+    latest_final_answer_preview: str
+    run_count: int
+    routes: list[str] = Field(default_factory=list)
+    selected_product_ids: list[str] = Field(default_factory=list)
+    recommended_product_ids: list[str] = Field(default_factory=list)
+    thread_state: AgentThreadState | None = None
+    provider: str
+    model: str
     items: list[AgentRunSummary] = Field(default_factory=list)

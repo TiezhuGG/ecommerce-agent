@@ -37,13 +37,17 @@ from app.schemas.agent import (
     AgentRunDetailResponse,
     AgentRunListResponse,
     AgentRunSummary,
+    AgentThreadState,
+    AgentThreadDetailResponse,
+    AgentThreadListResponse,
+    AgentThreadSummary,
     AgentPrecheckResponse,
     AgentToolCall,
     AgentToolStatus,
 )
 from app.schemas.compare import CompareResponse
 from app.schemas.faq import FaqAskResponse, FaqCitation
-from app.schemas.intent import IntentParseResponse
+from app.schemas.intent import IntentParseResponse, IntentSearchFilters
 
 
 AgentRoute = Literal["shopping", "faq", "compare"]
@@ -71,6 +75,7 @@ class AgentGraphState(TypedDict, total=False):
     message: str
     selected_product_ids: list[str]
     conversation_context: list[AgentConversationTurn]
+    thread_state: AgentThreadState | None
     warnings: list[str]
     tool_calls: list[AgentToolCall]
     route: AgentRoute
@@ -176,28 +181,251 @@ def list_recent_agent_runs(limit: int = 10) -> AgentRunListResponse:
     except (DatabaseUnavailableError, SQLAlchemyError):
         return AgentRunListResponse(backend="disabled", items=[])
 
-    items = [
-        AgentRunSummary(
-            run_id=str(row["run_id"]),
-            thread_id=str(row.get("thread_id", row["run_id"])),
-            created_at=str(row["created_at"]),
-            message=str(row["message"]),
-            route=str(row["route"]),
-            final_answer_preview=str(row["final_answer"])[:140],
-            warning_count=len(row["warnings"]) if isinstance(row["warnings"], list) else 0,
-            tool_call_count=len(row["tool_calls"]) if isinstance(row["tool_calls"], list) else 0,
-            selected_product_ids=list(row["selected_product_ids"])
-            if isinstance(row["selected_product_ids"], list)
-            else [],
-            recommended_product_ids=list(row["recommended_product_ids"])
-            if isinstance(row["recommended_product_ids"], list)
-            else [],
-            provider=str(row["provider"]),
-            model=str(row["model"]),
-        )
-        for row in rows
-    ]
+    items = [_build_run_summary(row) for row in rows]
     return AgentRunListResponse(backend=repositories.backend, items=items)
+
+
+def list_recent_agent_threads(limit: int = 10) -> AgentThreadListResponse:
+    """返回最近活跃的 Agent 会话线程摘要。"""
+
+    repositories = get_repositories()
+    if not repositories.backend.startswith("sqlalchemy-"):
+        return AgentThreadListResponse(backend="disabled", items=[])
+
+    try:
+        rows = list_agent_runs(None)
+    except (DatabaseUnavailableError, SQLAlchemyError):
+        return AgentThreadListResponse(backend="disabled", items=[])
+
+    thread_summaries: list[AgentThreadSummary] = []
+    thread_index: dict[str, int] = {}
+
+    for row in rows:
+        thread_id = str(row.get("thread_id", row["run_id"]))
+        summary_index = thread_index.get(thread_id)
+
+        if summary_index is None:
+            routes = [str(row["route"])] if str(row["route"]) else []
+            thread_index[thread_id] = len(thread_summaries)
+            thread_summaries.append(
+                AgentThreadSummary(
+                    thread_id=thread_id,
+                    latest_run_id=str(row["run_id"]),
+                    latest_created_at=str(row["created_at"]),
+                    latest_message=str(row["message"]),
+                    latest_route=str(row["route"]),
+                    latest_final_answer_preview=str(row["final_answer"])[:140],
+                    run_count=1,
+                    routes=routes,
+                    selected_product_ids=list(row["selected_product_ids"])
+                    if isinstance(row["selected_product_ids"], list)
+                    else [],
+                    recommended_product_ids=list(row["recommended_product_ids"])
+                    if isinstance(row["recommended_product_ids"], list)
+                    else [],
+                    provider=str(row["provider"]),
+                    model=str(row["model"]),
+                )
+            )
+        else:
+            summary = thread_summaries[summary_index]
+            summary.run_count += 1
+            route = str(row["route"])
+            if route and route not in summary.routes:
+                summary.routes.append(route)
+
+    return AgentThreadListResponse(
+        backend=repositories.backend,
+        items=thread_summaries[: max(1, min(limit, 20))],
+    )
+
+
+def get_agent_thread_detail(thread_id: str, limit: int = 20) -> AgentThreadDetailResponse:
+    """返回单条 Agent 会话线程详情及时间线。"""
+
+    repositories = get_repositories()
+    if not repositories.backend.startswith("sqlalchemy-"):
+        raise AgentRunHistoryUnavailableError("当前未启用数据库日志存储，无法查看线程详情。")
+
+    try:
+        matched_rows = _list_thread_rows(thread_id)
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise AgentRunHistoryUnavailableError(f"当前无法读取 Agent 线程详情：{exc}") from exc
+
+    if not matched_rows:
+        raise AgentRunNotFoundError(f"未找到 thread_id={thread_id} 对应的 Agent 会话线程。")
+
+    latest_row = matched_rows[0]
+    routes: list[str] = []
+    for row in matched_rows:
+        route = str(row["route"])
+        if route and route not in routes:
+            routes.append(route)
+
+    limited_rows = matched_rows[: max(1, min(limit, 20))]
+    thread_state = _build_thread_state_from_rows(thread_id, matched_rows)
+
+    return AgentThreadDetailResponse(
+        thread_id=thread_id,
+        latest_run_id=str(latest_row["run_id"]),
+        latest_created_at=str(latest_row["created_at"]),
+        latest_message=str(latest_row["message"]),
+        latest_route=str(latest_row["route"]),
+        latest_final_answer_preview=str(latest_row["final_answer"])[:140],
+        run_count=len(matched_rows),
+        routes=routes,
+        selected_product_ids=list(latest_row["selected_product_ids"])
+        if isinstance(latest_row["selected_product_ids"], list)
+        else [],
+        recommended_product_ids=list(latest_row["recommended_product_ids"])
+        if isinstance(latest_row["recommended_product_ids"], list)
+        else [],
+        thread_state=thread_state,
+        provider=str(latest_row["provider"]),
+        model=str(latest_row["model"]),
+        items=[_build_run_summary(row) for row in limited_rows],
+    )
+
+
+def _build_run_summary(row: dict[str, object]) -> AgentRunSummary:
+    return AgentRunSummary(
+        run_id=str(row["run_id"]),
+        thread_id=str(row.get("thread_id", row["run_id"])),
+        created_at=str(row["created_at"]),
+        message=str(row["message"]),
+        route=str(row["route"]),
+        final_answer_preview=str(row["final_answer"])[:140],
+        warning_count=len(row["warnings"]) if isinstance(row["warnings"], list) else 0,
+        tool_call_count=len(row["tool_calls"]) if isinstance(row["tool_calls"], list) else 0,
+        selected_product_ids=list(row["selected_product_ids"])
+        if isinstance(row["selected_product_ids"], list)
+        else [],
+        recommended_product_ids=list(row["recommended_product_ids"])
+        if isinstance(row["recommended_product_ids"], list)
+        else [],
+        provider=str(row["provider"]),
+        model=str(row["model"]),
+    )
+
+
+def _build_conversation_turn_from_row(row: dict[str, object]) -> AgentConversationTurn:
+    return AgentConversationTurn(
+        user_message=str(row["message"]),
+        agent_answer=str(row["final_answer"]),
+        route=str(row["route"]),
+        selected_product_ids=list(row["selected_product_ids"])
+        if isinstance(row["selected_product_ids"], list)
+        else [],
+        recommended_product_ids=list(row["recommended_product_ids"])
+        if isinstance(row["recommended_product_ids"], list)
+        else [],
+    )
+
+
+def _normalize_turn_key(turn: AgentConversationTurn) -> tuple[str, str, str, tuple[str, ...], tuple[str, ...]]:
+    return (
+        turn.user_message.strip(),
+        turn.agent_answer.strip(),
+        turn.route.strip(),
+        tuple(turn.selected_product_ids),
+        tuple(turn.recommended_product_ids),
+    )
+
+
+def _list_thread_rows(thread_id: str) -> list[dict[str, object]]:
+    rows = list_agent_runs(None)
+    return [row for row in rows if str(row.get("thread_id", row["run_id"])) == thread_id]
+
+
+def _load_thread_conversation_context(
+    thread_id: str,
+    limit: int = 4,
+) -> list[AgentConversationTurn]:
+    try:
+        matched_rows = _list_thread_rows(thread_id)
+    except (DatabaseUnavailableError, SQLAlchemyError):
+        return []
+
+    chronological_rows = list(reversed(matched_rows))
+    return [
+        _build_conversation_turn_from_row(row)
+        for row in chronological_rows[-limit:]
+    ]
+
+
+def _extract_search_filters(row: dict[str, object]):
+    parsed_intent = row.get("parsed_intent")
+    if not isinstance(parsed_intent, dict):
+        return None
+    search_filters = parsed_intent.get("search_filters")
+    if not isinstance(search_filters, dict):
+        return None
+
+    try:
+        return IntentSearchFilters(**search_filters)
+    except Exception:
+        return None
+
+
+def _build_thread_state_from_rows(
+    thread_id: str,
+    rows: list[dict[str, object]],
+) -> AgentThreadState:
+    if not rows:
+        return AgentThreadState(thread_id=thread_id)
+
+    latest_row = rows[0]
+    search_filters = None
+    selected_product_ids: list[str] = []
+    recommended_product_ids: list[str] = []
+    candidate_product_ids: list[str] = []
+
+    for row in rows:
+        if search_filters is None:
+            search_filters = _extract_search_filters(row)
+
+        row_selected = list(row["selected_product_ids"]) if isinstance(row["selected_product_ids"], list) else []
+        row_recommended = (
+            list(row["recommended_product_ids"]) if isinstance(row["recommended_product_ids"], list) else []
+        )
+
+        if not selected_product_ids and row_selected:
+            selected_product_ids = row_selected
+        if not recommended_product_ids and row_recommended:
+            recommended_product_ids = row_recommended
+        if not candidate_product_ids and (row_selected or row_recommended):
+            candidate_product_ids = list(dict.fromkeys([*row_selected, *row_recommended]))
+
+        if search_filters and selected_product_ids and recommended_product_ids and candidate_product_ids:
+            break
+
+    return AgentThreadState(
+        thread_id=thread_id,
+        last_run_id=str(latest_row["run_id"]),
+        last_route=str(latest_row["route"]),
+        search_filters=search_filters,
+        selected_product_ids=selected_product_ids,
+        recommended_product_ids=recommended_product_ids,
+        candidate_product_ids=candidate_product_ids,
+    )
+
+
+def _merge_conversation_context(
+    *contexts: list[AgentConversationTurn],
+    limit: int = 4,
+) -> list[AgentConversationTurn]:
+    merged: list[AgentConversationTurn] = []
+    seen: set[tuple[str, str, str, tuple[str, ...], tuple[str, ...]]] = set()
+
+    for context in contexts:
+        for turn in context:
+            key = _normalize_turn_key(turn)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(turn)
+
+    return _trim_conversation_context(merged, limit)
 
 
 def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
@@ -215,9 +443,16 @@ def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
     if row is None:
         raise AgentRunNotFoundError(f"未找到 run_id={run_id} 对应的 Agent 运行记录。")
 
+    thread_id = str(row.get("thread_id", row["run_id"]))
+    thread_rows: list[dict[str, object]] = []
+    try:
+        thread_rows = _list_thread_rows(thread_id)
+    except (DatabaseUnavailableError, SQLAlchemyError):
+        thread_rows = [row]
+
     return AgentRunDetailResponse(
         run_id=str(row["run_id"]),
-        thread_id=str(row.get("thread_id", row["run_id"])),
+        thread_id=thread_id,
         created_at=str(row["created_at"]),
         message=str(row["message"]),
         selected_product_ids=list(row["selected_product_ids"])
@@ -228,6 +463,7 @@ def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
             for item in row.get("conversation_context", [])
             if isinstance(item, dict)
         ],
+        thread_state=_build_thread_state_from_rows(thread_id, thread_rows),
         route=str(row["route"]),
         route_reasoning=str(row.get("route_reasoning", "")),
         final_answer=str(row["final_answer"]),
@@ -693,6 +929,8 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
     selected_product_ids = state.get("selected_product_ids", [])
     conversation_context = state.get("conversation_context", [])
     context_product_ids = _collect_context_product_ids(conversation_context)
+    thread_state = state.get("thread_state")
+    thread_state_product_ids = thread_state.candidate_product_ids if thread_state else []
     candidate_ids = (
         selected_product_ids
         if len(selected_product_ids) >= 2
@@ -700,6 +938,8 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
     )
     if len(candidate_ids) < 2:
         candidate_ids = context_product_ids
+    if len(candidate_ids) < 2:
+        candidate_ids = thread_state_product_ids
     candidate_ids = list(dict.fromkeys(candidate_ids))[:3]
 
     if len(candidate_ids) < 2:
@@ -714,6 +954,7 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
                 "candidate_ids": candidate_ids,
                 "conversation_turns": len(conversation_context),
                 "context_product_ids": context_product_ids,
+                "thread_state_product_ids": thread_state_product_ids,
             },
             output_payload={},
         )
@@ -734,6 +975,7 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
             "product_ids": candidate_ids,
             "conversation_turns": len(conversation_context),
             "context_product_ids": context_product_ids,
+            "thread_state_product_ids": thread_state_product_ids,
         },
         output_payload={"price_gap": result.price_gap},
     )
@@ -823,7 +1065,25 @@ def run_agent_chat(
         raise AgentServiceUnavailableError(precheck.summary)
 
     resolved_thread_id = _resolve_thread_id(thread_id)
-    trimmed_conversation_context = _trim_conversation_context(conversation_context or [])
+    repositories = get_repositories()
+    trimmed_frontend_context = _trim_conversation_context(conversation_context or [])
+    pre_run_thread_rows: list[dict[str, object]] = []
+    thread_conversation_context: list[AgentConversationTurn] = []
+    if thread_id and repositories.backend.startswith("sqlalchemy-"):
+        try:
+            pre_run_thread_rows = _list_thread_rows(resolved_thread_id)
+        except (DatabaseUnavailableError, SQLAlchemyError):
+            pre_run_thread_rows = []
+        thread_conversation_context = _load_thread_conversation_context(resolved_thread_id)
+    pre_run_thread_state = (
+        _build_thread_state_from_rows(resolved_thread_id, pre_run_thread_rows)
+        if pre_run_thread_rows
+        else AgentThreadState(thread_id=resolved_thread_id)
+    )
+    effective_conversation_context = _merge_conversation_context(
+        thread_conversation_context,
+        trimmed_frontend_context,
+    )
 
     try:
         app = _build_graph()
@@ -831,7 +1091,8 @@ def run_agent_chat(
             AgentGraphState(
                 message=message.strip(),
                 selected_product_ids=selected_product_ids,
-                conversation_context=trimmed_conversation_context,
+                conversation_context=effective_conversation_context,
+                thread_state=pre_run_thread_state,
                 warnings=[],
                 tool_calls=[],
                 recommended_product_ids=[],
@@ -848,7 +1109,8 @@ def run_agent_chat(
         message=message.strip(),
         thread_id=resolved_thread_id,
         selected_product_ids=list(selected_product_ids),
-        conversation_context=trimmed_conversation_context,
+        conversation_context=effective_conversation_context,
+        thread_state=None,
         route=state.get("route", "shopping"),
         route_reasoning=state.get("route_reasoning", ""),
         final_answer=state.get("final_answer", "本轮未生成可展示结果。"),
@@ -864,7 +1126,30 @@ def run_agent_chat(
         graph_runtime="langgraph",
     )
 
-    repositories = get_repositories()
+    current_row = {
+        "run_id": response.run_id or "",
+        "thread_id": response.thread_id,
+        "created_at": "",
+        "message": response.message,
+        "route": response.route,
+        "final_answer": response.final_answer,
+        "warnings": response.warnings,
+        "tool_calls": [tool_call.model_dump() for tool_call in response.tool_calls],
+        "selected_product_ids": response.selected_product_ids,
+        "recommended_product_ids": response.recommended_product_ids,
+        "parsed_intent": response.parsed_intent.model_dump() if response.parsed_intent else None,
+        "faq_result": response.faq_result.model_dump() if response.faq_result else None,
+        "compare_result": response.compare_result.model_dump() if response.compare_result else None,
+        "providers": response.providers.model_dump(),
+        "provider": response.provider,
+        "model": response.model,
+        "graph_runtime": response.graph_runtime,
+    }
+    response.thread_state = _build_thread_state_from_rows(
+        resolved_thread_id,
+        [current_row, *pre_run_thread_rows],
+    )
+
     if repositories.backend.startswith("sqlalchemy-"):
         try:
             run_id = persist_agent_run(
@@ -890,6 +1175,8 @@ def run_agent_chat(
             )
             response.run_id = run_id
             response.persisted = True
+            if response.thread_state is not None:
+                response.thread_state.last_run_id = run_id
         except (DatabaseUnavailableError, SQLAlchemyError) as exc:
             response.warnings.append(f"Agent 日志持久化失败，已跳过：{exc}")
 

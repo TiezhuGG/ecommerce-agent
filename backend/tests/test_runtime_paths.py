@@ -9,7 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.agent.service import get_agent_run_detail, list_recent_agent_runs, run_agent_chat
+from app.agent.service import (
+    get_agent_run_detail,
+    get_agent_thread_detail,
+    list_recent_agent_runs,
+    list_recent_agent_threads,
+    run_agent_chat,
+)
 from app.config import settings
 from app.db.models import AgentRunRecord, FaqEntryRecord, ProductRecord
 from app.db.repositories import get_repositories
@@ -124,6 +130,12 @@ class AgentRuntimeTests(unittest.TestCase):
 
     def test_agent_run_history_is_disabled_on_seed_backend(self) -> None:
         result = list_recent_agent_runs()
+
+        self.assertEqual(result.backend, "disabled")
+        self.assertEqual(result.items, [])
+
+    def test_agent_thread_history_is_disabled_on_seed_backend(self) -> None:
+        result = list_recent_agent_threads()
 
         self.assertEqual(result.backend, "disabled")
         self.assertEqual(result.items, [])
@@ -244,6 +256,9 @@ class RepositoryTests(unittest.TestCase):
 
     def test_agent_thread_can_be_continued_and_restored_from_history(self) -> None:
         database_path = ROOT / ".tmp" / "test-agent-thread-history.db"
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        if database_path.exists():
+            database_path.unlink()
         database_url = f"sqlite:///{database_path.as_posix()}"
         os.environ["DATABASE_URL"] = database_url
         settings.database_url = database_url
@@ -283,6 +298,148 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(detail.thread_id, first.thread_id)
         self.assertEqual(len(detail.conversation_context), 1)
         self.assertEqual(detail.conversation_context[0].user_message, first.message)
+
+    def test_agent_can_rebuild_conversation_context_from_thread_history(self) -> None:
+        database_path = ROOT / ".tmp" / "test-agent-thread-rebuild-context.db"
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        if database_path.exists():
+            database_path.unlink()
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        first = run_agent_chat("帮我推荐适合通勤的蓝牙耳机", [])
+        self.assertTrue(first.persisted)
+
+        second = run_agent_chat(
+            "继续刚才那组里，更适合苹果生态的是哪个？",
+            [],
+            [],
+            first.thread_id,
+        )
+
+        self.assertEqual(second.thread_id, first.thread_id)
+        self.assertEqual(len(second.conversation_context), 1)
+        self.assertEqual(second.conversation_context[0].user_message, first.message)
+        self.assertIsNotNone(second.thread_state)
+        assert second.thread_state is not None
+        self.assertGreaterEqual(len(second.thread_state.candidate_product_ids), 1)
+        assert second.run_id is not None
+
+        detail = get_agent_run_detail(second.run_id)
+        self.assertEqual(len(detail.conversation_context), 1)
+        self.assertEqual(detail.conversation_context[0].user_message, first.message)
+        self.assertIsNotNone(detail.thread_state)
+
+    def test_recent_agent_threads_are_grouped_when_sqlite_backend_is_enabled(self) -> None:
+        database_path = ROOT / ".tmp" / "test-agent-thread-list.db"
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        if database_path.exists():
+            database_path.unlink()
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        first = run_agent_chat("支持开发票吗", [])
+        run_agent_chat(
+            "那电子发票多久开出来？",
+            [],
+            [
+                AgentConversationTurn(
+                    user_message=first.message,
+                    agent_answer=first.final_answer,
+                    route=first.route,
+                    selected_product_ids=first.selected_product_ids,
+                    recommended_product_ids=first.recommended_product_ids,
+                )
+            ],
+            first.thread_id,
+        )
+        third = run_agent_chat("对比 Sony WF-1000XM5 和 Apple AirPods Pro 2", [])
+
+        history = list_recent_agent_threads(limit=10)
+
+        self.assertEqual(history.backend, "sqlalchemy-sqlite")
+        self.assertEqual(len(history.items), 2)
+        self.assertEqual(history.items[0].thread_id, third.thread_id)
+        self.assertEqual(history.items[0].run_count, 1)
+        self.assertEqual(history.items[1].thread_id, first.thread_id)
+        self.assertEqual(history.items[1].run_count, 2)
+        self.assertIn("faq", history.items[1].routes)
+
+    def test_agent_thread_detail_returns_timeline_when_sqlite_backend_is_enabled(self) -> None:
+        database_path = ROOT / ".tmp" / "test-agent-thread-detail.db"
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        if database_path.exists():
+            database_path.unlink()
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        first = run_agent_chat("帮我推荐适合通勤的蓝牙耳机", [])
+        second = run_agent_chat(
+            "继续刚才那组里，预算放宽到 2500 再看",
+            [],
+            [
+                AgentConversationTurn(
+                    user_message=first.message,
+                    agent_answer=first.final_answer,
+                    route=first.route,
+                    selected_product_ids=first.selected_product_ids,
+                    recommended_product_ids=first.recommended_product_ids,
+                )
+            ],
+            first.thread_id,
+        )
+
+        detail = get_agent_thread_detail(first.thread_id)
+
+        self.assertEqual(detail.thread_id, first.thread_id)
+        self.assertEqual(detail.latest_run_id, second.run_id)
+        self.assertEqual(detail.run_count, 2)
+        self.assertEqual(len(detail.items), 2)
+        self.assertEqual(detail.items[0].run_id, second.run_id)
+        self.assertEqual(detail.items[1].run_id, first.run_id)
+        self.assertIn("shopping", detail.routes)
+        self.assertIsNotNone(detail.thread_state)
+
+    def test_compare_can_fallback_to_thread_state_candidates(self) -> None:
+        database_path = ROOT / ".tmp" / "test-agent-thread-state-compare.db"
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        if database_path.exists():
+            database_path.unlink()
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        first = run_agent_chat("帮我推荐适合通勤的蓝牙耳机", [])
+        self.assertTrue(first.recommended_product_ids)
+
+        current_thread_id = first.thread_id
+        for question in [
+            "支持开发票吗",
+            "电子发票多久开",
+            "退货规则是什么",
+            "保修多久",
+        ]:
+            follow_up = run_agent_chat(question, [], [], current_thread_id)
+            current_thread_id = follow_up.thread_id
+
+        compare_result = run_agent_chat("继续比较刚才那两款，哪个更适合苹果生态？", [], [], current_thread_id)
+
+        self.assertEqual(compare_result.route, "compare")
+        self.assertIsNotNone(compare_result.compare_result)
+        self.assertIsNotNone(compare_result.thread_state)
+        assert compare_result.thread_state is not None
+        self.assertGreaterEqual(len(compare_result.thread_state.candidate_product_ids), 2)
 
     def test_seed_database_inserts_missing_faq_entries_into_existing_sqlite(self) -> None:
         database_path = ROOT / ".tmp" / "test-seed-sync.db"

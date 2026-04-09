@@ -46,6 +46,16 @@ export type AgentConversationTurn = {
   recommendedProductIds: string[];
 };
 
+export type AgentThreadState = {
+  threadId: string;
+  lastRunId: string;
+  lastRoute: AgentRoute | "";
+  searchFilters: SearchFilters | null;
+  selectedProductIds: string[];
+  recommendedProductIds: string[];
+  candidateProductIds: string[];
+};
+
 export type AgentPrecheck = {
   status: string;
   summary: string;
@@ -68,6 +78,7 @@ export type AgentResult = {
   threadId: string;
   selectedProductIds: string[];
   conversationContext: AgentConversationTurn[];
+  threadState: AgentThreadState | null;
   route: AgentRoute;
   routeReasoning: string;
   finalAnswer: string;
@@ -103,5 +114,42 @@ export type AgentRunSummary = {
 
 export type AgentRunHistory = {
   backend: string;
+  items: AgentRunSummary[];
+};
+
+export type AgentThreadSummary = {
+  threadId: string;
+  latestRunId: string;
+  latestCreatedAt: string;
+  latestMessage: string;
+  latestRoute: AgentRoute;
+  latestFinalAnswerPreview: string;
+  runCount: number;
+  routes: AgentRoute[];
+  selectedProductIds: string[];
+  recommendedProductIds: string[];
+  provider: string;
+  model: string;
+};
+
+export type AgentThreadHistory = {
+  backend: string;
+  items: AgentThreadSummary[];
+};
+
+export type AgentThreadDetail = {
+  threadId: string;
+  latestRunId: string;
+  latestCreatedAt: string;
+  latestMessage: string;
+  latestRoute: AgentRoute;
+  latestFinalAnswerPreview: string;
+  runCount: number;
+  routes: AgentRoute[];
+  selectedProductIds: string[];
+  recommendedProductIds: string[];
+  threadState: AgentThreadState | null;
+  provider: string;
+  model: string;
   items: AgentRunSummary[];
 };

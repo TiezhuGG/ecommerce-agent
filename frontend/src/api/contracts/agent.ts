@@ -47,11 +47,27 @@ export type AgentConversationTurnResponse = {
   recommended_product_ids: string[];
 };
 
+export type AgentThreadStateResponse = {
+  thread_id: string;
+  last_run_id: string;
+  last_route: "shopping" | "faq" | "compare" | "";
+  search_filters: {
+    keyword: string;
+    category: string;
+    brand: string;
+    max_price: number | null;
+  } | null;
+  selected_product_ids: string[];
+  recommended_product_ids: string[];
+  candidate_product_ids: string[];
+};
+
 export type AgentChatResponse = {
   message: string;
   thread_id: string;
   selected_product_ids: string[];
   conversation_context: AgentConversationTurnResponse[];
+  thread_state: AgentThreadStateResponse | null;
   route: "shopping" | "faq" | "compare";
   route_reasoning: string;
   final_answer: string;
@@ -76,6 +92,7 @@ export type AgentRunDetailResponse = {
   message: string;
   selected_product_ids: string[];
   conversation_context: AgentConversationTurnResponse[];
+  thread_state: AgentThreadStateResponse | null;
   route: "shopping" | "faq" | "compare";
   route_reasoning: string;
   final_answer: string;
@@ -109,5 +126,42 @@ export type AgentRunSummaryResponse = {
 
 export type AgentRunListResponse = {
   backend: string;
+  items: AgentRunSummaryResponse[];
+};
+
+export type AgentThreadSummaryResponse = {
+  thread_id: string;
+  latest_run_id: string;
+  latest_created_at: string;
+  latest_message: string;
+  latest_route: "shopping" | "faq" | "compare";
+  latest_final_answer_preview: string;
+  run_count: number;
+  routes: Array<"shopping" | "faq" | "compare">;
+  selected_product_ids: string[];
+  recommended_product_ids: string[];
+  provider: string;
+  model: string;
+};
+
+export type AgentThreadListResponse = {
+  backend: string;
+  items: AgentThreadSummaryResponse[];
+};
+
+export type AgentThreadDetailResponse = {
+  thread_id: string;
+  latest_run_id: string;
+  latest_created_at: string;
+  latest_message: string;
+  latest_route: "shopping" | "faq" | "compare";
+  latest_final_answer_preview: string;
+  run_count: number;
+  routes: Array<"shopping" | "faq" | "compare">;
+  selected_product_ids: string[];
+  recommended_product_ids: string[];
+  thread_state: AgentThreadStateResponse | null;
+  provider: string;
+  model: string;
   items: AgentRunSummaryResponse[];
 };

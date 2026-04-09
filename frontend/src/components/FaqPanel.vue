@@ -39,13 +39,12 @@ function submitFaq() {
   <section class="panel p-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h2 class="panel-title">知识库问答台</h2>
+        <h2 class="panel-title">售前问答</h2>
         <p class="muted-copy mt-2 max-w-3xl">
-          这一块已经不是传统“固定 FAQ 列表”，而是一个轻量的知识库检索入口。
-          你输入问题后，后端会先从本地知识文档里找出最相关的片段，再决定是让模型基于片段归纳答案，还是走模板回退。
+          发票、发货、质保、退换货、企业采购等问题，统一在这里问。你也可以先点左侧常见问题，再按需追问。
         </p>
       </div>
-      <span class="chip bg-sky-100 text-sky-800">RAG 第一版</span>
+      <span class="chip bg-sky-100 text-sky-800">知识库检索</span>
     </div>
 
     <div class="mt-6 grid gap-4 xl:grid-cols-[0.88fr_1.12fr]">
@@ -67,7 +66,7 @@ function submitFaq() {
           v-model="question"
           rows="4"
           class="field-input resize-none"
-          placeholder="例如：企业采购可以开专票吗？"
+          placeholder="例如：企业采购可以开专票吗？保修期多久？"
         />
 
         <button
@@ -76,24 +75,24 @@ function submitFaq() {
           :disabled="loading"
           @click="submitFaq"
         >
-          {{ loading ? "知识库检索中..." : "查询知识库" }}
+          {{ loading ? "正在查询..." : "查询答案" }}
         </button>
 
         <p
           v-if="errorMessage"
           class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700"
         >
-          知识库查询失败：{{ errorMessage }}
+          查询失败：{{ errorMessage }}
         </p>
 
         <div v-else-if="result" class="mt-6 space-y-5">
           <div>
-            <p class="text-sm font-semibold text-slate-700">问题</p>
+            <p class="text-sm font-semibold text-slate-700">你的问题</p>
             <p class="mt-2 text-base text-slate-900">{{ result.question }}</p>
           </div>
 
           <div>
-            <p class="text-sm font-semibold text-slate-700">回答</p>
+            <p class="text-sm font-semibold text-slate-700">答案</p>
             <p class="mt-2 whitespace-pre-line text-sm leading-7 text-slate-700">
               {{ result.answer }}
             </p>
@@ -101,15 +100,6 @@ function submitFaq() {
 
           <div class="flex flex-wrap gap-2">
             <span class="chip bg-sky-100 text-sky-800">来源：{{ result.sourceLabel }}</span>
-            <span class="chip bg-violet-100 text-violet-800">
-              检索模式：{{ result.retrievalMode }}
-            </span>
-            <span class="chip bg-slate-100 text-slate-700">
-              检索来源：{{ result.retrievalProvider }}
-            </span>
-            <span class="chip bg-amber-100 text-amber-800">
-              回答来源：{{ result.answerProvider }}
-            </span>
             <span
               v-if="result.matchedEntry"
               class="chip bg-emerald-100 text-emerald-800"
@@ -128,9 +118,6 @@ function submitFaq() {
               >
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="chip bg-slate-100 text-slate-700">{{ citation.title }}</span>
-                  <span class="chip bg-amber-100 text-amber-800">
-                    得分：{{ citation.score.toFixed(2) }}
-                  </span>
                   <span class="chip bg-sky-100 text-sky-800">{{ citation.sourceLabel }}</span>
                 </div>
                 <p class="mt-3 whitespace-pre-line text-sm leading-7 text-slate-700">
@@ -141,7 +128,7 @@ function submitFaq() {
           </div>
 
           <div v-if="result.suggestions.length">
-            <p class="text-sm font-semibold text-slate-700">可继续追问</p>
+            <p class="text-sm font-semibold text-slate-700">你还可以继续问</p>
             <div class="mt-3 flex flex-wrap gap-2">
               <button
                 v-for="item in result.suggestions"
@@ -154,6 +141,23 @@ function submitFaq() {
               </button>
             </div>
           </div>
+
+          <details class="rounded-3xl bg-white p-4">
+            <summary class="cursor-pointer text-sm font-semibold text-slate-700">
+              查看检索细节
+            </summary>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <span class="chip bg-violet-100 text-violet-800">
+                检索模式：{{ result.retrievalMode }}
+              </span>
+              <span class="chip bg-slate-100 text-slate-700">
+                检索来源：{{ result.retrievalProvider }}
+              </span>
+              <span class="chip bg-amber-100 text-amber-800">
+                回答来源：{{ result.answerProvider }}
+              </span>
+            </div>
+          </details>
         </div>
       </div>
     </div>

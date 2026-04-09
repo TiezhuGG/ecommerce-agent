@@ -6,6 +6,10 @@ import type {
   AgentPrecheckResponse,
   AgentRunListResponse,
   AgentRunSummaryResponse,
+  AgentThreadDetailResponse,
+  AgentThreadListResponse,
+  AgentThreadStateResponse,
+  AgentThreadSummaryResponse,
   AgentToolCallResponse,
   AgentToolStatusResponse,
 } from "./contracts/agent";
@@ -18,6 +22,10 @@ import type {
   AgentRunHistory,
   AgentResult,
   AgentRunSummary,
+  AgentThreadHistory,
+  AgentThreadDetail,
+  AgentThreadState,
+  AgentThreadSummary,
   AgentToolCall,
   AgentToolStatus,
 } from "../types/agent";
@@ -65,6 +73,30 @@ function mapConversationTurn(turn: AgentConversationTurnResponse): AgentConversa
 }
 
 
+function mapAgentThreadState(state: AgentThreadStateResponse | null): AgentThreadState | null {
+  if (!state) {
+    return null;
+  }
+
+  return {
+    threadId: state.thread_id,
+    lastRunId: state.last_run_id,
+    lastRoute: state.last_route,
+    searchFilters: state.search_filters
+      ? {
+          keyword: state.search_filters.keyword,
+          category: state.search_filters.category,
+          brand: state.search_filters.brand,
+          maxPrice: state.search_filters.max_price,
+        }
+      : null,
+    selectedProductIds: state.selected_product_ids,
+    recommendedProductIds: state.recommended_product_ids,
+    candidateProductIds: state.candidate_product_ids,
+  };
+}
+
+
 function mapAgentRunSummary(item: AgentRunSummaryResponse): AgentRunSummary {
   return {
     runId: item.run_id,
@@ -85,6 +117,44 @@ function mapAgentRunSummary(item: AgentRunSummaryResponse): AgentRunSummary {
     },
     provider: item.provider,
     model: item.model,
+  };
+}
+
+
+function mapAgentThreadSummary(item: AgentThreadSummaryResponse): AgentThreadSummary {
+  return {
+    threadId: item.thread_id,
+    latestRunId: item.latest_run_id,
+    latestCreatedAt: item.latest_created_at,
+    latestMessage: item.latest_message,
+    latestRoute: item.latest_route,
+    latestFinalAnswerPreview: item.latest_final_answer_preview,
+    runCount: item.run_count,
+    routes: item.routes,
+    selectedProductIds: item.selected_product_ids,
+    recommendedProductIds: item.recommended_product_ids,
+    provider: item.provider,
+    model: item.model,
+  };
+}
+
+
+function mapAgentThreadDetail(item: AgentThreadDetailResponse): AgentThreadDetail {
+  return {
+    threadId: item.thread_id,
+    latestRunId: item.latest_run_id,
+    latestCreatedAt: item.latest_created_at,
+    latestMessage: item.latest_message,
+    latestRoute: item.latest_route,
+    latestFinalAnswerPreview: item.latest_final_answer_preview,
+    runCount: item.run_count,
+    routes: item.routes,
+    selectedProductIds: item.selected_product_ids,
+    recommendedProductIds: item.recommended_product_ids,
+    threadState: mapAgentThreadState(item.thread_state),
+    provider: item.provider,
+    model: item.model,
+    items: item.items.map(mapAgentRunSummary),
   };
 }
 
@@ -119,6 +189,7 @@ function mapAgentResultFromResponse(
     threadId: response.thread_id,
     selectedProductIds: response.selected_product_ids,
     conversationContext: response.conversation_context.map(mapConversationTurn),
+    threadState: mapAgentThreadState(response.thread_state),
     route: response.route,
     routeReasoning: response.route_reasoning,
     finalAnswer: response.final_answer,
@@ -222,4 +293,26 @@ export async function fetchRecentAgentRuns(limit = 10): Promise<AgentRunHistory>
     backend: response.backend,
     items: response.items.map(mapAgentRunSummary),
   };
+}
+
+
+export async function fetchRecentAgentThreads(limit = 10): Promise<AgentThreadHistory> {
+  const response = await requestJson<AgentThreadListResponse>(`/agent/threads?limit=${limit}`);
+
+  return {
+    backend: response.backend,
+    items: response.items.map(mapAgentThreadSummary),
+  };
+}
+
+
+export async function fetchAgentThreadDetail(
+  threadId: string,
+  limit = 20,
+): Promise<AgentThreadDetail> {
+  const response = await requestJson<AgentThreadDetailResponse>(
+    `/agent/threads/${threadId}?limit=${limit}`,
+  );
+
+  return mapAgentThreadDetail(response);
 }

@@ -22,21 +22,26 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
 
 <template>
   <section class="panel p-6">
-    <div class="flex items-center justify-between gap-4">
+    <div class="flex items-start justify-between gap-4">
       <div>
-        <h2 class="panel-title">结构化商品搜索</h2>
+        <h2 class="panel-title">先缩小商品范围</h2>
         <p class="muted-copy mt-2">
-          这个模块负责收集结构化筛选条件。它本身不直接请求后端，而是把筛选状态交给页面总控，
-          由页面决定什么时候触发商品搜索。这种拆分方式更利于后续 Agent 回填条件，也更贴近企业里的状态分层。
+          如果你已经知道预算、品类或品牌，先在这里筛一轮。右侧 AI 会直接复用这些条件继续推荐。
         </p>
       </div>
+
       <button
         type="button"
         class="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
         @click="emit('reset')"
       >
-        重置筛选
+        清空筛选
       </button>
+    </div>
+
+    <div class="mt-5 flex flex-wrap gap-2">
+      <span class="chip bg-slate-100 text-slate-700">支持关键词、分类、品牌、预算</span>
+      <span class="chip bg-amber-100 text-amber-800">修改后会自动刷新商品列表</span>
     </div>
 
     <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -86,7 +91,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
           type="number"
           min="0"
           class="field-input"
-          placeholder="例如：1500"
+          placeholder="例如：2500"
           @input="
             updateField(
               'maxPrice',

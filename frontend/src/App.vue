@@ -1,37 +1,38 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 import {
   chatWithAgent,
   fetchAgentPrecheck,
   fetchAgentRunDetail,
+  fetchAgentThreadDetail,
   fetchRecentAgentRuns,
+  fetchRecentAgentThreads,
 } from "./api/agent";
 import { requestJson } from "./api/client";
 import { compareProducts } from "./api/compare";
-import { askFaq } from "./api/faq";
 import type { CompareResponse } from "./api/contracts/compare";
+import { askFaq } from "./api/faq";
 import { fetchProducts } from "./api/products";
-import AgentPrecheckCard from "./components/AgentPrecheckCard.vue";
-import AgentPromptPanel from "./components/AgentPromptPanel.vue";
-import AgentRunHistoryCard from "./components/AgentRunHistoryCard.vue";
-import ComparePanel from "./components/ComparePanel.vue";
-import FaqPanel from "./components/FaqPanel.vue";
-import HealthStatusCard from "./components/HealthStatusCard.vue";
-import KnowledgeBaseAdminPanel from "./components/KnowledgeBaseAdminPanel.vue";
-import ProductCatalogAdminPanel from "./components/ProductCatalogAdminPanel.vue";
-import ProductGrid from "./components/ProductGrid.vue";
-import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
 import { suggestedFaqQuestions } from "./data/mockFaqEntries";
 import type {
   AgentConversationTurn,
   AgentPrecheck,
   AgentResult,
   AgentRunHistory,
+  AgentThreadDetail,
+  AgentThreadHistory,
 } from "./types/agent";
 import type { Product, SearchFilters } from "./types/catalog";
 import type { FaqAskResult } from "./types/faq";
 import type { HealthResponse } from "./types/system";
+
+type AdminSection = "system" | "knowledge" | "catalog";
+type AppView = "shop" | "admin-system" | "admin-knowledge" | "admin-catalog";
+
+const route = useRoute();
+const router = useRouter();
 
 const health = ref<HealthResponse | null>(null);
 const healthLoading = ref(false);
@@ -68,15 +69,74 @@ const agentErrorMessage = ref("");
 const currentAgentThreadId = ref<string | null>(null);
 const agentConversationContext = ref<AgentConversationTurn[]>([]);
 const agentRunHistory = ref<AgentRunHistory | null>(null);
-const agentRunHistoryLoading = ref(false);
-const agentRunHistoryErrorMessage = ref("");
+const agentThreadHistory = ref<AgentThreadHistory | null>(null);
+const agentHistoryLoading = ref(false);
+const agentHistoryErrorMessage = ref("");
 const selectedAgentRunId = ref<string | null>(null);
+const selectedAgentThreadId = ref<string | null>(null);
 const agentRunDetailLoading = ref(false);
 const agentRunDetailErrorMessage = ref("");
+const agentThreadDetail = ref<AgentThreadDetail | null>(null);
+const agentThreadDetailLoading = ref(false);
+const agentThreadDetailErrorMessage = ref("");
 
 const faqResult = ref<FaqAskResult | null>(null);
 const faqLoading = ref(false);
 const faqErrorMessage = ref("");
+
+const devPanelsOverride = String(import.meta.env.VITE_SHOW_DEV_PANELS ?? "")
+  .trim()
+  .toLowerCase();
+
+const showDevPanels = computed(() => {
+  if (devPanelsOverride === "true") {
+    return true;
+  }
+
+  if (devPanelsOverride === "false") {
+    return false;
+  }
+
+  return import.meta.env.DEV;
+});
+
+const activeView = computed<AppView>(() => {
+  const name = String(route.name ?? "shop");
+
+  if (name === "admin-knowledge") {
+    return "admin-knowledge";
+  }
+
+  if (name === "admin-catalog") {
+    return "admin-catalog";
+  }
+
+  if (name === "admin-system") {
+    return "admin-system";
+  }
+
+  return "shop";
+});
+
+const adminSection = computed<AdminSection>(() => {
+  if (activeView.value === "admin-knowledge") {
+    return "knowledge";
+  }
+
+  if (activeView.value === "admin-catalog") {
+    return "catalog";
+  }
+
+  return "system";
+});
+
+const isAdminView = computed(() => activeView.value !== "shop");
+
+const devEntryLabel = computed(() =>
+  import.meta.env.DEV
+    ? "开发环境默认开放后台入口，后台路径现在由 vue-router 正式管理。"
+    : "生产环境默认隐藏后台入口，只有显式开启 VITE_SHOW_DEV_PANELS 后才允许进入 /admin/*。",
+);
 
 const selectedProducts = computed(() => {
   const productMap = new Map<string, Product>();
@@ -93,6 +153,65 @@ const selectedProducts = computed(() => {
     .map((productId) => productMap.get(productId))
     .filter((product): product is Product => Boolean(product));
 });
+
+const showComparePanel = computed(
+  () =>
+    selectedProducts.value.length > 0 ||
+    Boolean(compareResult.value) ||
+    compareLoading.value ||
+    Boolean(compareErrorMessage.value),
+);
+
+const showHistoryPanel = computed(
+  () =>
+    agentHistoryLoading.value ||
+    Boolean(agentHistoryErrorMessage.value) ||
+    Boolean(currentAgentThreadId.value) ||
+    (agentRunHistory.value?.items.length ?? 0) > 0 ||
+    (agentThreadHistory.value?.items.length ?? 0) > 0,
+);
+
+function navigateTo(view: AppView, replace = false) {
+  const target = { name: view };
+  if (replace) {
+    void router.replace(target);
+    return;
+  }
+
+  void router.push(target);
+}
+
+function navigateAdminSection(section: AdminSection) {
+  if (section === "knowledge") {
+    navigateTo("admin-knowledge");
+    return;
+  }
+
+  if (section === "catalog") {
+    navigateTo("admin-catalog");
+    return;
+  }
+
+  navigateTo("admin-system");
+}
+
+function syncUiFromAgentResult(result: AgentResult, restoreFilters: boolean) {
+  recommendedProductIds.value = result.recommendedProductIds;
+
+  if (result.compareResult) {
+    compareResult.value = result.compareResult;
+    selectedProductIds.value = result.compareResult.compared_products.map((product) => product.id);
+  } else {
+    selectedProductIds.value =
+      result.threadState?.selectedProductIds.length
+        ? [...result.threadState.selectedProductIds]
+        : [...result.selectedProductIds];
+  }
+
+  if (restoreFilters && result.threadState?.searchFilters) {
+    filters.value = { ...result.threadState.searchFilters };
+  }
+}
 
 async function loadHealth() {
   healthLoading.value = true;
@@ -123,18 +242,39 @@ async function loadAgentPrecheck() {
   }
 }
 
-async function loadAgentRunHistory() {
-  agentRunHistoryLoading.value = true;
-  agentRunHistoryErrorMessage.value = "";
+async function loadAgentHistory() {
+  agentHistoryLoading.value = true;
+  agentHistoryErrorMessage.value = "";
 
   try {
-    agentRunHistory.value = await fetchRecentAgentRuns();
+    const [runHistory, threadHistory] = await Promise.all([
+      fetchRecentAgentRuns(),
+      fetchRecentAgentThreads(),
+    ]);
+    agentRunHistory.value = runHistory;
+    agentThreadHistory.value = threadHistory;
+
+    if (
+      selectedAgentThreadId.value &&
+      !threadHistory.items.some((item) => item.threadId === selectedAgentThreadId.value)
+    ) {
+      selectedAgentThreadId.value = null;
+      agentThreadDetail.value = null;
+    }
+
+    if (
+      selectedAgentRunId.value &&
+      !runHistory.items.some((item) => item.runId === selectedAgentRunId.value)
+    ) {
+      selectedAgentRunId.value = null;
+    }
   } catch (error) {
     agentRunHistory.value = null;
-    agentRunHistoryErrorMessage.value =
-      error instanceof Error ? error.message : "未知错误，无法加载 Agent 运行历史。";
+    agentThreadHistory.value = null;
+    agentHistoryErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法加载 Agent 历史记录。";
   } finally {
-    agentRunHistoryLoading.value = false;
+    agentHistoryLoading.value = false;
   }
 }
 
@@ -232,7 +372,8 @@ async function runAgentPrompt(query: string) {
     agentResult.value = result;
     currentAgentThreadId.value = result.threadId;
     selectedAgentRunId.value = result.runId;
-    recommendedProductIds.value = result.recommendedProductIds;
+    selectedAgentThreadId.value = result.threadId;
+    syncUiFromAgentResult(result, false);
     agentConversationContext.value = [
       ...agentConversationContext.value,
       {
@@ -243,7 +384,7 @@ async function runAgentPrompt(query: string) {
         recommendedProductIds: result.recommendedProductIds,
       },
     ].slice(-4);
-    void loadAgentRunHistory();
+    void loadAgentHistory();
   } catch (error) {
     agentResult.value = null;
     agentErrorMessage.value =
@@ -256,6 +397,7 @@ async function runAgentPrompt(query: string) {
 function clearAgentConversation() {
   currentAgentThreadId.value = null;
   agentConversationContext.value = [];
+  selectedAgentThreadId.value = null;
 }
 
 function buildConversationContextFromResult(result: AgentResult): AgentConversationTurn[] {
@@ -279,12 +421,36 @@ async function inspectAgentRun(runId: string) {
   try {
     const result = await fetchAgentRunDetail(runId);
     agentResult.value = result;
-    recommendedProductIds.value = result.recommendedProductIds;
+    selectedAgentThreadId.value = result.threadId;
+    syncUiFromAgentResult(result, false);
   } catch (error) {
     agentRunDetailErrorMessage.value =
       error instanceof Error ? error.message : "未知错误，无法加载 Agent 运行详情。";
   } finally {
     agentRunDetailLoading.value = false;
+  }
+}
+
+async function inspectAgentThread(threadId: string) {
+  if (selectedAgentThreadId.value === threadId && agentThreadDetail.value) {
+    selectedAgentThreadId.value = null;
+    agentThreadDetail.value = null;
+    agentThreadDetailErrorMessage.value = "";
+    return;
+  }
+
+  agentThreadDetailLoading.value = true;
+  agentThreadDetailErrorMessage.value = "";
+  selectedAgentThreadId.value = threadId;
+
+  try {
+    agentThreadDetail.value = await fetchAgentThreadDetail(threadId);
+  } catch (error) {
+    agentThreadDetail.value = null;
+    agentThreadDetailErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法加载线程时间线。";
+  } finally {
+    agentThreadDetailLoading.value = false;
   }
 }
 
@@ -297,8 +463,10 @@ async function resumeAgentThread(runId: string) {
     const result = await fetchAgentRunDetail(runId);
     agentResult.value = result;
     currentAgentThreadId.value = result.threadId;
+    selectedAgentThreadId.value = result.threadId;
     agentConversationContext.value = buildConversationContextFromResult(result);
-    recommendedProductIds.value = result.recommendedProductIds;
+    syncUiFromAgentResult(result, true);
+    navigateTo("shop");
   } catch (error) {
     agentRunDetailErrorMessage.value =
       error instanceof Error ? error.message : "未知错误，无法恢复历史会话。";
@@ -329,8 +497,92 @@ function applyAgentCompareResult() {
   }
 
   compareResult.value = agentResult.value.compareResult;
-  selectedProductIds.value = agentResult.value.compareResult.compared_products.map((product) => product.id);
+  selectedProductIds.value = agentResult.value.compareResult.compared_products.map(
+    (product) => product.id,
+  );
 }
+
+const routeViewProps = computed(() => {
+  if (isAdminView.value) {
+    return {
+      health: health.value,
+      healthLoading: healthLoading.value,
+      healthErrorMessage: healthErrorMessage.value,
+      refreshHealth: loadHealth,
+      agentPrecheck: agentPrecheck.value,
+      agentPrecheckLoading: agentPrecheckLoading.value,
+      agentPrecheckErrorMessage: agentPrecheckErrorMessage.value,
+      refreshPrecheck: loadAgentPrecheck,
+      entryLabel: devEntryLabel.value,
+      activeSection: adminSection.value,
+      navigateSection: navigateAdminSection,
+    };
+  }
+
+  return {
+    catalog: {
+      filters: filters.value,
+      categories: availableCategories.value,
+      brands: availableBrands.value,
+      products: products.value,
+      productsLoading: productsLoading.value,
+      productsErrorMessage: productsErrorMessage.value,
+      appliedFilters: appliedFilters.value,
+      selectedProductIds: selectedProductIds.value,
+      recommendedProductIds: recommendedProductIds.value,
+      selectedProducts: selectedProducts.value,
+      compareResult: compareResult.value,
+      compareLoading: compareLoading.value,
+      compareErrorMessage: compareErrorMessage.value,
+      showComparePanel: showComparePanel.value,
+    },
+    agent: {
+      result: agentResult.value,
+      loading: agentLoading.value,
+      errorMessage: agentErrorMessage.value,
+      currentThreadId: currentAgentThreadId.value,
+      conversationContext: agentConversationContext.value,
+    },
+    faq: {
+      suggestedQuestions: suggestedFaqQuestions,
+      result: faqResult.value,
+      loading: faqLoading.value,
+      errorMessage: faqErrorMessage.value,
+    },
+    historyPanel: {
+      visible: showHistoryPanel.value,
+      history: agentRunHistory.value,
+      threadHistory: agentThreadHistory.value,
+      threadDetail: agentThreadDetail.value,
+      loading: agentHistoryLoading.value,
+      errorMessage: agentHistoryErrorMessage.value,
+      selectedRunId: selectedAgentRunId.value,
+      selectedThreadId: selectedAgentThreadId.value,
+      currentThreadId: currentAgentThreadId.value,
+      threadDetailLoading: agentThreadDetailLoading.value,
+      detailLoading: agentRunDetailLoading.value,
+      threadDetailErrorMessage: agentThreadDetailErrorMessage.value,
+      detailErrorMessage: agentRunDetailErrorMessage.value,
+    },
+    updateFilters,
+    resetFilters,
+    submitAgentPrompt: runAgentPrompt,
+    applyAgentFilters,
+    applyAgentFaqResult,
+    applyAgentCompareResult,
+    clearAgentConversation,
+    toggleCompare,
+    submitFaq,
+    refreshHistory: loadAgentHistory,
+    inspectAgentThread,
+    inspectAgentRun,
+    resumeAgentThread,
+    showDevPanels: showDevPanels.value,
+    goToAdminSystem: () => navigateTo("admin-system"),
+    goToAdminKnowledge: () => navigateTo("admin-knowledge"),
+    goToAdminCatalog: () => navigateTo("admin-catalog"),
+  };
+});
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -365,7 +617,7 @@ watch(
 onMounted(() => {
   void loadHealth();
   void loadAgentPrecheck();
-  void loadAgentRunHistory();
+  void loadAgentHistory();
   void loadProducts();
   void submitFaq(suggestedFaqQuestions[0] ?? "支持七天无理由退换货吗？");
 });
@@ -375,121 +627,54 @@ onMounted(() => {
   <main
     class="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-10"
   >
-    <section class="panel overflow-hidden">
-      <div class="grid gap-8 px-6 py-8 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-10">
+    <section class="panel px-5 py-4 sm:px-6">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700">
-            电商导购 Agent / 第九轮迭代
+          <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-700">
+            Ecommerce Agent
           </p>
-          <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-            升级 FAQ 为知识库检索，让 Agent 能返回“答案 + 引用片段”
-          </h1>
-          <p class="mt-5 max-w-3xl text-base leading-8 text-slate-600">
-            这一轮的重点不是再加一个孤立接口，而是把原来的 FAQ 工具升级成轻量 RAG。
-            后端会先做本地检索，再把命中的知识片段交给模型生成回答；即使模型失败，也还能基于片段走模板回退。
-            前端现在不仅能看到答案，还能看到检索模式、命中的知识片段和 Agent 的复用轨迹。
+          <p class="mt-1 text-sm leading-6 text-slate-600">
+            用户入口固定为 `/`，后台入口固定为 `/admin/*`。当前由根壳层统一持有状态，真实页面结构已经迁移到路由页面组件。
           </p>
-
-          <div class="mt-6 flex flex-wrap gap-3">
-            <span class="chip bg-amber-100 text-amber-800">商品搜索工具</span>
-            <span class="chip bg-sky-100 text-sky-800">知识库 RAG</span>
-            <span class="chip bg-emerald-100 text-emerald-800">商品对比工具</span>
-            <span class="chip bg-violet-100 text-violet-800">LangGraph 编排</span>
-          </div>
         </div>
 
-        <div class="rounded-[28px] bg-ink p-6 text-white">
-          <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-300">
-            本轮重点
-          </p>
-          <ul class="mt-5 space-y-4 text-sm leading-7 text-slate-200">
-            <li>1. FAQ 工具升级为知识库检索，返回命中的引用片段。</li>
-            <li>2. Agent 复用知识库结果，并把引用信息写入工具调用轨迹。</li>
-            <li>3. 前端知识库面板展示检索模式、引用片段和继续追问建议。</li>
-            <li>4. Agent 工作台补充知识库结果回填区，便于观察 RAG 链路。</li>
-          </ul>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-full px-4 py-2 text-sm transition"
+            :class="
+              !isAdminView
+                ? 'bg-ink text-white'
+                : 'border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+            "
+            @click="navigateTo('shop')"
+          >
+            用户导购页
+          </button>
+
+          <button
+            v-if="showDevPanels"
+            type="button"
+            class="rounded-full px-4 py-2 text-sm transition"
+            :class="
+              isAdminView
+                ? 'bg-amber-500 text-white'
+                : 'border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+            "
+            @click="navigateTo('admin-system')"
+          >
+            后台工作区
+          </button>
         </div>
       </div>
+
+      <p v-if="!showDevPanels" class="mt-4 text-xs leading-6 text-slate-500">
+        当前按用户视角运行，后台工作区默认隐藏。生产环境需显式设置 `VITE_SHOW_DEV_PANELS=true` 才允许进入 `/admin/*`。
+      </p>
     </section>
 
-    <HealthStatusCard
-      :health="health"
-      :loading="healthLoading"
-      :error-message="healthErrorMessage"
-      :on-refresh="loadHealth"
-    />
-
-    <section class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <SearchFiltersPanel
-        :filters="filters"
-        :categories="availableCategories"
-        :brands="availableBrands"
-        @update="updateFilters"
-        @reset="resetFilters"
-      />
-
-      <div class="grid gap-6">
-        <AgentPrecheckCard
-          :precheck="agentPrecheck"
-          :loading="agentPrecheckLoading"
-          :error-message="agentPrecheckErrorMessage"
-          @refresh="loadAgentPrecheck"
-        />
-        <AgentPromptPanel
-          :result="agentResult"
-          :loading="agentLoading"
-          :error-message="agentErrorMessage"
-          :current-thread-id="currentAgentThreadId"
-          :conversation-context="agentConversationContext"
-          @submit="runAgentPrompt"
-          @apply-filters="applyAgentFilters"
-          @apply-faq="applyAgentFaqResult"
-          @apply-compare="applyAgentCompareResult"
-          @clear-conversation="clearAgentConversation"
-        />
-        <AgentRunHistoryCard
-          :history="agentRunHistory"
-          :loading="agentRunHistoryLoading"
-          :error-message="agentRunHistoryErrorMessage"
-          :selected-run-id="selectedAgentRunId"
-          :detail-loading="agentRunDetailLoading"
-          :detail-error-message="agentRunDetailErrorMessage"
-          @refresh="loadAgentRunHistory"
-          @inspect="inspectAgentRun"
-          @resume="resumeAgentThread"
-        />
-      </div>
-    </section>
-
-    <section class="grid gap-6 2xl:grid-cols-[1.1fr_0.9fr]">
-      <ProductGrid
-        :products="products"
-        :selected-ids="selectedProductIds"
-        :recommended-ids="recommendedProductIds"
-        :loading="productsLoading"
-        :error-message="productsErrorMessage"
-        :applied-filters="appliedFilters"
-        @toggle-compare="toggleCompare"
-      />
-      <ComparePanel
-        :selected-products="selectedProducts"
-        :result="compareResult"
-        :loading="compareLoading"
-        :error-message="compareErrorMessage"
-      />
-    </section>
-
-    <section class="grid gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
-      <FaqPanel
-        :suggested-questions="suggestedFaqQuestions"
-        :result="faqResult"
-        :loading="faqLoading"
-        :error-message="faqErrorMessage"
-        @submit="submitFaq"
-      />
-      <KnowledgeBaseAdminPanel />
-    </section>
-
-    <ProductCatalogAdminPanel />
+    <RouterView v-slot="{ Component }">
+      <component :is="Component" v-if="Component" v-bind="routeViewProps" />
+    </RouterView>
   </main>
 </template>

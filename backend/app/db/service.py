@@ -330,7 +330,7 @@ def ensure_agent_run_schema() -> None:
         session.commit()
 
 
-def list_agent_runs(limit: int = 10) -> list[dict[str, object]]:
+def list_agent_runs(limit: int | None = 10) -> list[dict[str, object]]:
     if not SQLALCHEMY_AVAILABLE:
         raise DatabaseUnavailableError("SQLAlchemy is not installed.")
     if AgentRunRecord is None:
@@ -340,13 +340,12 @@ def list_agent_runs(limit: int = 10) -> list[dict[str, object]]:
 
     ensure_agent_run_schema()
 
-    normalized_limit = max(1, min(limit, 20))
+    normalized_limit = None if limit is None else max(1, min(limit, 200))
     with session_scope() as session:
-        rows = session.scalars(
-            select(AgentRunRecord)
-            .order_by(AgentRunRecord.created_at.desc(), AgentRunRecord.id.desc())
-            .limit(normalized_limit)
-        ).all()
+        statement = select(AgentRunRecord).order_by(AgentRunRecord.created_at.desc(), AgentRunRecord.id.desc())
+        if normalized_limit is not None:
+            statement = statement.limit(normalized_limit)
+        rows = session.scalars(statement).all()
 
     return [_agent_run_row_to_payload(row) for row in rows]
 
