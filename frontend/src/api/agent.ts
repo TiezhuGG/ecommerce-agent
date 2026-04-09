@@ -1,5 +1,6 @@
 import type {
   AgentChatResponse,
+  AgentConversationTurnResponse,
   AgentProvidersResponse,
   AgentRunDetailResponse,
   AgentPrecheckResponse,
@@ -11,6 +12,7 @@ import type {
 import { requestJson } from "./client";
 import { mapFaqAskResponse } from "./faq";
 import type {
+  AgentConversationTurn,
   AgentPrecheck,
   AgentProviders,
   AgentRunHistory,
@@ -48,6 +50,17 @@ function mapAgentProviders(providers: AgentProvidersResponse): AgentProviders {
     intentProvider: providers.intent_provider,
     answerProvider: providers.answer_provider,
     retrievalProvider: providers.retrieval_provider,
+  };
+}
+
+
+function mapConversationTurn(turn: AgentConversationTurnResponse): AgentConversationTurn {
+  return {
+    userMessage: turn.user_message,
+    agentAnswer: turn.agent_answer,
+    route: turn.route,
+    selectedProductIds: turn.selected_product_ids,
+    recommendedProductIds: turn.recommended_product_ids,
   };
 }
 
@@ -103,6 +116,7 @@ function mapAgentResultFromResponse(
     createdAt: options.createdAt,
     message: response.message,
     selectedProductIds: response.selected_product_ids,
+    conversationContext: response.conversation_context.map(mapConversationTurn),
     route: response.route,
     routeReasoning: response.route_reasoning,
     finalAnswer: response.final_answer,
@@ -161,6 +175,7 @@ export async function fetchAgentPrecheck(): Promise<AgentPrecheck> {
 export async function chatWithAgent(
   message: string,
   selectedProductIds: string[],
+  conversationContext: AgentConversationTurn[],
 ): Promise<AgentResult> {
   const response = await requestJson<AgentChatResponse>("/agent/chat", {
     method: "POST",
@@ -170,6 +185,13 @@ export async function chatWithAgent(
     body: JSON.stringify({
       message,
       selected_product_ids: selectedProductIds,
+      conversation_context: conversationContext.map((turn) => ({
+        user_message: turn.userMessage,
+        agent_answer: turn.agentAnswer,
+        route: turn.route,
+        selected_product_ids: turn.selectedProductIds,
+        recommended_product_ids: turn.recommendedProductIds,
+      })),
     }),
   });
 

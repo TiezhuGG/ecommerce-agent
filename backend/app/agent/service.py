@@ -31,6 +31,7 @@ from app.llm.service import (
 )
 from app.schemas.agent import (
     AgentChatResponse,
+    AgentConversationTurn,
     AgentProviders,
     AgentRunDetailResponse,
     AgentRunListResponse,
@@ -68,6 +69,7 @@ class AgentGraphState(TypedDict, total=False):
 
     message: str
     selected_product_ids: list[str]
+    conversation_context: list[AgentConversationTurn]
     warnings: list[str]
     tool_calls: list[AgentToolCall]
     route: AgentRoute
@@ -218,6 +220,11 @@ def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
         selected_product_ids=list(row["selected_product_ids"])
         if isinstance(row["selected_product_ids"], list)
         else [],
+        conversation_context=[
+            AgentConversationTurn(**item)
+            for item in row.get("conversation_context", [])
+            if isinstance(item, dict)
+        ],
         route=str(row["route"]),
         route_reasoning=str(row.get("route_reasoning", "")),
         final_answer=str(row["final_answer"]),
@@ -256,6 +263,53 @@ def _summarize_provider(providers: AgentProviders) -> str:
         if value:
             return value
     return "未知"
+
+
+def _trim_conversation_context(
+    conversation_context: list[AgentConversationTurn],
+    limit: int = 4,
+) -> list[AgentConversationTurn]:
+    trimmed = [
+        turn
+        for turn in conversation_context
+        if turn.user_message.strip() and turn.agent_answer.strip()
+    ]
+    return trimmed[-limit:]
+
+
+def _format_conversation_context_text(conversation_context: list[AgentConversationTurn]) -> str:
+    if not conversation_context:
+        return "无历史上下文"
+
+    lines: list[str] = []
+    for index, turn in enumerate(conversation_context, start=1):
+        route_label = f" / 路由：{turn.route}" if turn.route else ""
+        lines.append(f"第 {index} 轮用户：{turn.user_message}")
+        lines.append(f"第 {index} 轮Agent：{turn.agent_answer}{route_label}")
+        if turn.selected_product_ids:
+            lines.append(f"第 {index} 轮已选商品：{', '.join(turn.selected_product_ids)}")
+        if turn.recommended_product_ids:
+            lines.append(f"第 {index} 轮推荐商品：{', '.join(turn.recommended_product_ids)}")
+    return "\n".join(lines)
+
+
+def _build_contextual_query(message: str, conversation_context: list[AgentConversationTurn]) -> str:
+    context_text = _format_conversation_context_text(conversation_context)
+    if context_text == "无历史上下文":
+        return message
+    return (
+        "以下是最近几轮对话上下文，请结合这些信息理解当前追问。\n"
+        f"{context_text}\n"
+        f"当前用户追问：{message}"
+    )
+
+
+def _collect_context_product_ids(conversation_context: list[AgentConversationTurn]) -> list[str]:
+    collected: list[str] = []
+    for turn in conversation_context:
+        collected.extend(turn.selected_product_ids)
+        collected.extend(turn.recommended_product_ids)
+    return list(dict.fromkeys(collected))
 
 
 def _append_tool_call(
@@ -340,7 +394,10 @@ def _route_schema() -> dict[str, Any]:
     }
 
 
-def _classify_route_with_llm(message: str) -> tuple[AgentRoute, str, str]:
+def _classify_route_with_llm(
+    message: str,
+    conversation_context: list[AgentConversationTurn],
+) -> tuple[AgentRoute, str, str]:
     """当规则不够确定时，再交给模型做路由分类。"""
 
     result = request_json_object(
@@ -369,6 +426,7 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
 
     message = state["message"]
     selected_product_ids = state.get("selected_product_ids", [])
+    conversation_context = state.get("conversation_context", [])
 
     route, reasoning = _detect_route_by_rules(message, selected_product_ids)
     if route:
@@ -381,13 +439,20 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
             tool_name="route_classifier",
             status="completed",
             summary=reasoning,
-            input_payload={"message": message, "selected_product_ids": selected_product_ids},
+            input_payload={
+                "message": message,
+                "selected_product_ids": selected_product_ids,
+                "conversation_turns": len(conversation_context),
+            },
             output_payload={"route": route, "provider": "规则路由"},
         )
         return state
 
     try:
-        llm_route, llm_reasoning, provider = _classify_route_with_llm(message)
+        llm_route, llm_reasoning, provider = _classify_route_with_llm(
+            _build_contextual_query(message, conversation_context),
+            conversation_context,
+        )
         state["route"] = llm_route
         state["route_reasoning"] = llm_reasoning
         state["route_provider"] = provider
@@ -397,7 +462,7 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
             tool_name="route_classifier",
             status="completed",
             summary=llm_reasoning,
-            input_payload={"message": message},
+            input_payload={"message": message, "conversation_turns": len(conversation_context)},
             output_payload={"route": llm_route, "provider": provider},
         )
         return state
@@ -422,10 +487,12 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
     """导购节点：先做意图解析，再做商品搜索。"""
 
     message = state["message"]
+    conversation_context = state.get("conversation_context", [])
+    contextual_query = _build_contextual_query(message, conversation_context)
     parsed_intent: IntentParseResponse | None = None
 
     try:
-        parsed_intent = parse_intent(message)
+        parsed_intent = parse_intent(contextual_query).model_copy(update={"query": message})
         state["parsed_intent"] = parsed_intent
         state["intent_provider"] = parsed_intent.provider
         intent_summary = "已将自然语言导购需求解析为结构化筛选条件。"
@@ -436,7 +503,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
             tool_name="intent_parse",
             status="completed",
             summary=intent_summary,
-            input_payload={"query": message},
+            input_payload={"query": message, "conversation_turns": len(conversation_context)},
             output_payload={"applied_filters": parsed_intent.applied_filters},
         )
 
@@ -454,7 +521,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
             tool_name="intent_parse",
             status="failed",
             summary="意图解析失败，已退化为关键词搜索。",
-            input_payload={"query": message},
+            input_payload={"query": message, "conversation_turns": len(conversation_context)},
             output_payload={},
         )
         product_result = search_products(keyword=message)
@@ -573,7 +640,10 @@ def _serialize_citations(citations: list[FaqCitation]) -> list[dict[str, Any]]:
 def _faq_node(state: AgentGraphState) -> AgentGraphState:
     """知识库节点：复用 FAQ / RAG 工具完成售前规则问答。"""
 
-    result = ask_faq(state["message"])
+    conversation_context = state.get("conversation_context", [])
+    result = ask_faq(_build_contextual_query(state["message"], conversation_context)).model_copy(
+        update={"question": state["message"]}
+    )
     state["faq_result"] = result
     state["retrieval_provider"] = result.retrieval_provider
     state["answer_provider"] = result.answer_provider
@@ -584,7 +654,7 @@ def _faq_node(state: AgentGraphState) -> AgentGraphState:
         tool_name="ask_faq",
         status="completed",
         summary=f"已完成知识库检索，命中来源为 {result.source_label}。",
-        input_payload={"question": state["message"]},
+        input_payload={"question": state["message"], "conversation_turns": len(conversation_context)},
         output_payload={
             "source_label": result.source_label,
             "retrieval_mode": result.retrieval_mode,
@@ -611,11 +681,15 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
     """对比节点：根据已选商品或问题文本生成对比结果。"""
 
     selected_product_ids = state.get("selected_product_ids", [])
+    conversation_context = state.get("conversation_context", [])
+    context_product_ids = _collect_context_product_ids(conversation_context)
     candidate_ids = (
         selected_product_ids
         if len(selected_product_ids) >= 2
         else _infer_compare_ids_from_message(state["message"])
     )
+    if len(candidate_ids) < 2:
+        candidate_ids = context_product_ids
     candidate_ids = list(dict.fromkeys(candidate_ids))[:3]
 
     if len(candidate_ids) < 2:
@@ -626,7 +700,11 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
             tool_name="compare_products",
             status="skipped",
             summary="对比商品不足 2 个，已提示用户先选择商品。",
-            input_payload={"candidate_ids": candidate_ids},
+            input_payload={
+                "candidate_ids": candidate_ids,
+                "conversation_turns": len(conversation_context),
+                "context_product_ids": context_product_ids,
+            },
             output_payload={},
         )
         state["final_answer"] = "如果你想让我做商品对比，请先在列表里选中至少 2 个商品，或者在问题里明确写出两个商品型号。"
@@ -642,7 +720,11 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
         tool_name="compare_products",
         status="completed",
         summary=f"已完成 {len(result.compared_products)} 个商品的对比分析。",
-        input_payload={"product_ids": candidate_ids},
+        input_payload={
+            "product_ids": candidate_ids,
+            "conversation_turns": len(conversation_context),
+            "context_product_ids": context_product_ids,
+        },
         output_payload={"price_gap": result.price_gap},
     )
     return state
@@ -718,12 +800,18 @@ def _build_graph():
     return graph.compile()
 
 
-def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatResponse:
+def run_agent_chat(
+    message: str,
+    selected_product_ids: list[str],
+    conversation_context: list[AgentConversationTurn] | None = None,
+) -> AgentChatResponse:
     """执行一轮 LangGraph Agent 对话。"""
 
     precheck = get_agent_precheck()
     if precheck.status == "blocked":
         raise AgentServiceUnavailableError(precheck.summary)
+
+    trimmed_conversation_context = _trim_conversation_context(conversation_context or [])
 
     try:
         app = _build_graph()
@@ -731,6 +819,7 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
             AgentGraphState(
                 message=message.strip(),
                 selected_product_ids=selected_product_ids,
+                conversation_context=trimmed_conversation_context,
                 warnings=[],
                 tool_calls=[],
                 recommended_product_ids=[],
@@ -746,6 +835,7 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
     response = AgentChatResponse(
         message=message.strip(),
         selected_product_ids=list(selected_product_ids),
+        conversation_context=trimmed_conversation_context,
         route=state.get("route", "shopping"),
         route_reasoning=state.get("route_reasoning", ""),
         final_answer=state.get("final_answer", "本轮未生成可展示结果。"),
@@ -773,6 +863,7 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
                     "warnings": response.warnings,
                     "tool_calls": [tool_call.model_dump() for tool_call in response.tool_calls],
                     "selected_product_ids": selected_product_ids,
+                    "conversation_context": [turn.model_dump() for turn in response.conversation_context],
                     "recommended_product_ids": response.recommended_product_ids,
                     "parsed_intent": response.parsed_intent.model_dump() if response.parsed_intent else None,
                     "faq_result": response.faq_result.model_dump() if response.faq_result else None,

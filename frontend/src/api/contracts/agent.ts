@@ -39,9 +39,18 @@ export type AgentProvidersResponse = {
   retrieval_provider: string;
 };
 
+export type AgentConversationTurnResponse = {
+  user_message: string;
+  agent_answer: string;
+  route: "shopping" | "faq" | "compare" | "";
+  selected_product_ids: string[];
+  recommended_product_ids: string[];
+};
+
 export type AgentChatResponse = {
   message: string;
   selected_product_ids: string[];
+  conversation_context: AgentConversationTurnResponse[];
   route: "shopping" | "faq" | "compare";
   route_reasoning: string;
   final_answer: string;
@@ -64,6 +73,7 @@ export type AgentRunDetailResponse = {
   created_at: string;
   message: string;
   selected_product_ids: string[];
+  conversation_context: AgentConversationTurnResponse[];
   route: "shopping" | "faq" | "compare";
   route_reasoning: string;
   final_answer: string;

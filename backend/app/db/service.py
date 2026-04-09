@@ -205,6 +205,7 @@ def persist_agent_run(payload: dict[str, object]) -> str:
                 warnings_json=json.dumps(payload.get("warnings", []), ensure_ascii=False),
                 tool_calls_json=json.dumps(payload.get("tool_calls", []), ensure_ascii=False),
                 selected_product_ids_json=json.dumps(payload.get("selected_product_ids", []), ensure_ascii=False),
+                conversation_context_json=json.dumps(payload.get("conversation_context", []), ensure_ascii=False),
                 recommended_product_ids_json=json.dumps(payload.get("recommended_product_ids", []), ensure_ascii=False),
                 parsed_intent_json=json.dumps(payload.get("parsed_intent"), ensure_ascii=False),
                 faq_result_json=json.dumps(payload.get("faq_result"), ensure_ascii=False),
@@ -246,6 +247,7 @@ def _agent_run_row_to_payload(row: AgentRunRecord) -> dict[str, object]:
         "warnings": _deserialize_json_field(row.warnings_json) or [],
         "tool_calls": _deserialize_json_field(row.tool_calls_json) or [],
         "selected_product_ids": _deserialize_json_field(row.selected_product_ids_json) or [],
+        "conversation_context": _deserialize_json_field(row.conversation_context_json) or [],
         "recommended_product_ids": _deserialize_json_field(row.recommended_product_ids_json) or [],
         "parsed_intent": _deserialize_json_field(row.parsed_intent_json),
         "faq_result": _deserialize_json_field(row.faq_result_json),
@@ -298,6 +300,19 @@ def ensure_agent_run_schema() -> None:
                         },
                         ensure_ascii=False,
                     )
+                },
+            )
+
+        if "conversation_context_json" not in columns:
+            session.execute(text("ALTER TABLE agent_runs ADD COLUMN conversation_context_json TEXT"))
+            session.execute(
+                text(
+                    "UPDATE agent_runs "
+                    "SET conversation_context_json = :conversation_context_json "
+                    "WHERE conversation_context_json IS NULL OR conversation_context_json = ''"
+                ),
+                {
+                    "conversation_context_json": json.dumps([], ensure_ascii=False),
                 },
             )
         session.commit()

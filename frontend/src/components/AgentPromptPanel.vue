@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
-import type { AgentResult } from "../types/agent";
+import type { AgentConversationTurn, AgentResult } from "../types/agent";
 
-defineProps<{
+const props = defineProps<{
   result: AgentResult | null;
   loading: boolean;
   errorMessage: string;
+  conversationContext: AgentConversationTurn[];
 }>();
 
 const emit = defineEmits<{
@@ -14,10 +15,15 @@ const emit = defineEmits<{
   applyFilters: [];
   applyFaq: [];
   applyCompare: [];
+  clearConversation: [];
 }>();
 
 const prompt = ref(
   "帮我推荐 2000 元以内、适合通勤和开会的蓝牙耳机，优先考虑降噪和佩戴舒适。",
+);
+
+const usedConversationContext = computed(
+  () => props.result?.conversationContext ?? props.conversationContext,
 );
 
 function submitPrompt() {
@@ -36,18 +42,70 @@ function submitPrompt() {
       <div>
         <h2 class="panel-title">Agent 工作台</h2>
         <p class="muted-copy mt-2">
-          这里是统一的 Agent 入口。你输入一句自然语言后，后端会先做路由判断，再按场景调用商品搜索、知识库问答、商品对比等工具，
-          最后把执行轨迹和结果一起返回给前端。当前工作台默认只展示 Agent 结果，不会自动改写搜索、FAQ 或对比面板。
+          这里是统一的 Agent 入口。当前版本已经支持携带最近几轮会话上下文，适合做“继续追问”“改预算”“换品牌”“沿着上轮结果再比较”这类多轮交互。
         </p>
       </div>
       <span class="chip bg-violet-100 text-violet-800">LangGraph 单 Agent</span>
+    </div>
+
+    <div class="mt-5 rounded-3xl bg-slate-50 p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-semibold text-slate-800">当前会话上下文</p>
+          <p class="mt-2 text-sm leading-7 text-slate-600">
+            默认保留最近 4 轮问答，提交下一次 Agent 请求时会一并带给后端。
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="chip bg-slate-100 text-slate-700">
+            {{ conversationContext.length }} 轮已缓存
+          </span>
+          <button
+            type="button"
+            class="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="!conversationContext.length"
+            @click="emit('clearConversation')"
+          >
+            清空会话
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="conversationContext.length"
+        class="mt-4 max-h-[320px] space-y-3 overflow-y-auto pr-1"
+      >
+        <article
+          v-for="(turn, index) in conversationContext"
+          :key="`${index}-${turn.userMessage}`"
+          class="rounded-2xl border border-slate-200 bg-white p-4"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="chip bg-slate-100 text-slate-700">第 {{ index + 1 }} 轮</span>
+            <span v-if="turn.route" class="chip bg-emerald-100 text-emerald-800">
+              {{ turn.route }}
+            </span>
+          </div>
+          <p class="mt-3 text-sm font-semibold leading-6 text-slate-900">{{ turn.userMessage }}</p>
+          <p class="mt-2 line-clamp-3 whitespace-pre-line text-sm leading-7 text-slate-600">
+            {{ turn.agentAnswer }}
+          </p>
+        </article>
+      </div>
+
+      <div
+        v-else
+        class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-600"
+      >
+        当前还没有多轮上下文。从第一次对话开始，后续追问会自动接上前文。
+      </div>
     </div>
 
     <textarea
       v-model="prompt"
       rows="5"
       class="field-input mt-6 resize-none"
-      placeholder="例如：对比一下 Sony WF-1000XM5 和 Apple AirPods Pro 2，看谁更适合通勤。"
+      placeholder="例如：继续刚才那组里，换成更适合苹果生态的；或者把预算放宽到 2500 再看。"
       @keydown.ctrl.enter="submitPrompt"
     />
 
@@ -95,6 +153,30 @@ function submitPrompt() {
         <p v-if="result.createdAt" class="mt-2 text-xs text-slate-500">
           创建时间：{{ result.createdAt }}
         </p>
+
+        <div v-if="usedConversationContext.length" class="mt-5">
+          <p class="text-sm font-semibold text-slate-700">本轮参考的会话上下文</p>
+          <div class="mt-3 space-y-3">
+            <article
+              v-for="(turn, index) in usedConversationContext"
+              :key="`${turn.userMessage}-${index}`"
+              class="rounded-2xl border border-slate-200 bg-white p-4"
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="chip bg-slate-100 text-slate-700">第 {{ index + 1 }} 轮</span>
+                <span v-if="turn.route" class="chip bg-emerald-100 text-emerald-800">
+                  {{ turn.route }}
+                </span>
+              </div>
+              <p class="mt-3 text-sm font-semibold leading-6 text-slate-900">
+                {{ turn.userMessage }}
+              </p>
+              <p class="mt-2 line-clamp-3 whitespace-pre-line text-sm leading-7 text-slate-600">
+                {{ turn.agentAnswer }}
+              </p>
+            </article>
+          </div>
+        </div>
 
         <div class="mt-5">
           <p class="text-sm font-semibold text-slate-700">最终回答</p>
@@ -172,8 +254,7 @@ function submitPrompt() {
       <div v-if="result.parsedIntent" class="rounded-3xl bg-slate-50 p-5">
         <p class="text-sm font-semibold text-slate-700">意图解析结果</p>
         <p class="mt-2 text-sm leading-7 text-slate-600">
-          这一块展示的是 Agent 在导购场景下调用意图解析工具后得到的结构化条件。
-          它的意义不是直接给用户看，而是把自然语言翻译成系统可执行的筛选参数。
+          这一块展示的是 Agent 在导购场景下调意图解析工具后得到的结构化筛选条件。
         </p>
 
         <div class="mt-4 flex flex-wrap gap-2">

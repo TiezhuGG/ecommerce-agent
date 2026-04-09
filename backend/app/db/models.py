@@ -62,6 +62,7 @@ else:
         warnings_json: Mapped[str] = mapped_column(Text, nullable=False)
         tool_calls_json: Mapped[str] = mapped_column(Text, nullable=False)
         selected_product_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+        conversation_context_json: Mapped[str] = mapped_column(Text, nullable=False)
         recommended_product_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
         parsed_intent_json: Mapped[str] = mapped_column(Text, nullable=False)
         faq_result_json: Mapped[str] = mapped_column(Text, nullable=False)

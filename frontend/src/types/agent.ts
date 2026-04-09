@@ -38,6 +38,14 @@ export type AgentProviders = {
   retrievalProvider: string;
 };
 
+export type AgentConversationTurn = {
+  userMessage: string;
+  agentAnswer: string;
+  route: AgentRoute | "";
+  selectedProductIds: string[];
+  recommendedProductIds: string[];
+};
+
 export type AgentPrecheck = {
   status: string;
   summary: string;
@@ -58,6 +66,7 @@ export type AgentResult = {
   createdAt: string | null;
   message: string;
   selectedProductIds: string[];
+  conversationContext: AgentConversationTurn[];
   route: AgentRoute;
   routeReasoning: string;
   finalAnswer: string;

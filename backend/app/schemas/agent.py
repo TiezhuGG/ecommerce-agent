@@ -8,7 +8,7 @@ from app.schemas.intent import IntentParseResponse
 
 
 class AgentToolStatus(BaseModel):
-    """预检阶段的工具状态。"""
+    """Precheck-time tool status."""
 
     name: str
     enabled: bool
@@ -16,7 +16,7 @@ class AgentToolStatus(BaseModel):
 
 
 class AgentPrecheckResponse(BaseModel):
-    """Agent 启动前的预检结果。"""
+    """Agent precheck result."""
 
     status: str
     summary: str
@@ -33,7 +33,7 @@ class AgentPrecheckResponse(BaseModel):
 
 
 class AgentToolCall(BaseModel):
-    """Agent 在本轮对话中的工具调用记录。"""
+    """Structured tool-call trace for one agent run."""
 
     tool_name: str
     status: str
@@ -43,7 +43,7 @@ class AgentToolCall(BaseModel):
 
 
 class AgentProviders(BaseModel):
-    """Agent 各阶段来源信息。"""
+    """Provider details used across agent stages."""
 
     route_provider: str = ""
     intent_provider: str = ""
@@ -51,21 +51,36 @@ class AgentProviders(BaseModel):
     retrieval_provider: str = ""
 
 
-class AgentChatRequest(BaseModel):
-    """Agent 对话请求。"""
+class AgentConversationTurn(BaseModel):
+    """One prior turn passed into the current agent run as conversation memory."""
 
-    message: str = Field(..., min_length=1, description="用户输入的自然语言问题或导购需求")
+    user_message: str = Field(..., min_length=1)
+    agent_answer: str = Field(..., min_length=1)
+    route: str = Field(default="")
+    selected_product_ids: list[str] = Field(default_factory=list)
+    recommended_product_ids: list[str] = Field(default_factory=list)
+
+
+class AgentChatRequest(BaseModel):
+    """Agent chat request."""
+
+    message: str = Field(..., min_length=1, description="Current user message")
     selected_product_ids: list[str] = Field(
         default_factory=list,
-        description="前端当前已选中的商品，用于帮助 Agent 进入商品对比场景",
+        description="Currently selected products from the frontend workbench",
+    )
+    conversation_context: list[AgentConversationTurn] = Field(
+        default_factory=list,
+        description="Recent prior turns kept by the frontend session",
     )
 
 
 class AgentChatResponse(BaseModel):
-    """Agent 对话结果。"""
+    """Agent chat result."""
 
     message: str
     selected_product_ids: list[str] = Field(default_factory=list)
+    conversation_context: list[AgentConversationTurn] = Field(default_factory=list)
     route: str
     route_reasoning: str
     final_answer: str
@@ -84,12 +99,13 @@ class AgentChatResponse(BaseModel):
 
 
 class AgentRunDetailResponse(BaseModel):
-    """单次持久化 Agent 运行详情。"""
+    """Persisted agent run detail."""
 
     run_id: str
     created_at: str
     message: str
     selected_product_ids: list[str] = Field(default_factory=list)
+    conversation_context: list[AgentConversationTurn] = Field(default_factory=list)
     route: str
     route_reasoning: str
     final_answer: str
@@ -107,7 +123,7 @@ class AgentRunDetailResponse(BaseModel):
 
 
 class AgentRunSummary(BaseModel):
-    """持久化的 Agent 运行摘要。"""
+    """Persisted agent run summary."""
 
     run_id: str
     created_at: str
@@ -123,7 +139,7 @@ class AgentRunSummary(BaseModel):
 
 
 class AgentRunListResponse(BaseModel):
-    """最近的 Agent 运行历史。"""
+    """Recent persisted agent runs."""
 
     backend: str
     items: list[AgentRunSummary] = Field(default_factory=list)

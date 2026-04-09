@@ -23,7 +23,12 @@ import ProductCatalogAdminPanel from "./components/ProductCatalogAdminPanel.vue"
 import ProductGrid from "./components/ProductGrid.vue";
 import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
 import { suggestedFaqQuestions } from "./data/mockFaqEntries";
-import type { AgentPrecheck, AgentResult, AgentRunHistory } from "./types/agent";
+import type {
+  AgentConversationTurn,
+  AgentPrecheck,
+  AgentResult,
+  AgentRunHistory,
+} from "./types/agent";
 import type { Product, SearchFilters } from "./types/catalog";
 import type { FaqAskResult } from "./types/faq";
 import type { HealthResponse } from "./types/system";
@@ -60,6 +65,7 @@ const compareErrorMessage = ref("");
 const agentResult = ref<AgentResult | null>(null);
 const agentLoading = ref(false);
 const agentErrorMessage = ref("");
+const agentConversationContext = ref<AgentConversationTurn[]>([]);
 const agentRunHistory = ref<AgentRunHistory | null>(null);
 const agentRunHistoryLoading = ref(false);
 const agentRunHistoryErrorMessage = ref("");
@@ -216,10 +222,24 @@ async function runAgentPrompt(query: string) {
   agentRunDetailErrorMessage.value = "";
 
   try {
-    const result = await chatWithAgent(query, selectedProductIds.value);
+    const result = await chatWithAgent(
+      query,
+      selectedProductIds.value,
+      agentConversationContext.value,
+    );
     agentResult.value = result;
     selectedAgentRunId.value = result.runId;
     recommendedProductIds.value = result.recommendedProductIds;
+    agentConversationContext.value = [
+      ...agentConversationContext.value,
+      {
+        userMessage: query,
+        agentAnswer: result.finalAnswer,
+        route: result.route,
+        selectedProductIds: result.selectedProductIds,
+        recommendedProductIds: result.recommendedProductIds,
+      },
+    ].slice(-4);
     void loadAgentRunHistory();
   } catch (error) {
     agentResult.value = null;
@@ -228,6 +248,10 @@ async function runAgentPrompt(query: string) {
   } finally {
     agentLoading.value = false;
   }
+}
+
+function clearAgentConversation() {
+  agentConversationContext.value = [];
 }
 
 async function inspectAgentRun(runId: string) {
@@ -379,10 +403,12 @@ onMounted(() => {
           :result="agentResult"
           :loading="agentLoading"
           :error-message="agentErrorMessage"
+          :conversation-context="agentConversationContext"
           @submit="runAgentPrompt"
           @apply-filters="applyAgentFilters"
           @apply-faq="applyAgentFaqResult"
           @apply-compare="applyAgentCompareResult"
+          @clear-conversation="clearAgentConversation"
         />
         <AgentRunHistoryCard
           :history="agentRunHistory"
