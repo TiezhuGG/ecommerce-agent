@@ -65,6 +65,7 @@ const compareErrorMessage = ref("");
 const agentResult = ref<AgentResult | null>(null);
 const agentLoading = ref(false);
 const agentErrorMessage = ref("");
+const currentAgentThreadId = ref<string | null>(null);
 const agentConversationContext = ref<AgentConversationTurn[]>([]);
 const agentRunHistory = ref<AgentRunHistory | null>(null);
 const agentRunHistoryLoading = ref(false);
@@ -226,8 +227,10 @@ async function runAgentPrompt(query: string) {
       query,
       selectedProductIds.value,
       agentConversationContext.value,
+      currentAgentThreadId.value,
     );
     agentResult.value = result;
+    currentAgentThreadId.value = result.threadId;
     selectedAgentRunId.value = result.runId;
     recommendedProductIds.value = result.recommendedProductIds;
     agentConversationContext.value = [
@@ -251,7 +254,21 @@ async function runAgentPrompt(query: string) {
 }
 
 function clearAgentConversation() {
+  currentAgentThreadId.value = null;
   agentConversationContext.value = [];
+}
+
+function buildConversationContextFromResult(result: AgentResult): AgentConversationTurn[] {
+  return [
+    ...result.conversationContext,
+    {
+      userMessage: result.message,
+      agentAnswer: result.finalAnswer,
+      route: result.route,
+      selectedProductIds: result.selectedProductIds,
+      recommendedProductIds: result.recommendedProductIds,
+    },
+  ].slice(-4);
 }
 
 async function inspectAgentRun(runId: string) {
@@ -266,6 +283,25 @@ async function inspectAgentRun(runId: string) {
   } catch (error) {
     agentRunDetailErrorMessage.value =
       error instanceof Error ? error.message : "未知错误，无法加载 Agent 运行详情。";
+  } finally {
+    agentRunDetailLoading.value = false;
+  }
+}
+
+async function resumeAgentThread(runId: string) {
+  agentRunDetailLoading.value = true;
+  agentRunDetailErrorMessage.value = "";
+  selectedAgentRunId.value = runId;
+
+  try {
+    const result = await fetchAgentRunDetail(runId);
+    agentResult.value = result;
+    currentAgentThreadId.value = result.threadId;
+    agentConversationContext.value = buildConversationContextFromResult(result);
+    recommendedProductIds.value = result.recommendedProductIds;
+  } catch (error) {
+    agentRunDetailErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法恢复历史会话。";
   } finally {
     agentRunDetailLoading.value = false;
   }
@@ -403,6 +439,7 @@ onMounted(() => {
           :result="agentResult"
           :loading="agentLoading"
           :error-message="agentErrorMessage"
+          :current-thread-id="currentAgentThreadId"
           :conversation-context="agentConversationContext"
           @submit="runAgentPrompt"
           @apply-filters="applyAgentFilters"
@@ -419,6 +456,7 @@ onMounted(() => {
           :detail-error-message="agentRunDetailErrorMessage"
           @refresh="loadAgentRunHistory"
           @inspect="inspectAgentRun"
+          @resume="resumeAgentThread"
         />
       </div>
     </section>

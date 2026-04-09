@@ -49,6 +49,7 @@ export type AgentConversationTurnResponse = {
 
 export type AgentChatResponse = {
   message: string;
+  thread_id: string;
   selected_product_ids: string[];
   conversation_context: AgentConversationTurnResponse[];
   route: "shopping" | "faq" | "compare";
@@ -70,6 +71,7 @@ export type AgentChatResponse = {
 
 export type AgentRunDetailResponse = {
   run_id: string;
+  thread_id: string;
   created_at: string;
   message: string;
   selected_product_ids: string[];
@@ -92,6 +94,7 @@ export type AgentRunDetailResponse = {
 
 export type AgentRunSummaryResponse = {
   run_id: string;
+  thread_id: string;
   created_at: string;
   message: string;
   route: "shopping" | "faq" | "compare";

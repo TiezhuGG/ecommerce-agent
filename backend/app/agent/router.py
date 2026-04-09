@@ -52,7 +52,12 @@ async def agent_chat_endpoint(payload: AgentChatRequest) -> AgentChatResponse:
     """统一的 Agent 对话入口。"""
 
     try:
-        return run_agent_chat(payload.message, payload.selected_product_ids, payload.conversation_context)
+        return run_agent_chat(
+            payload.message,
+            payload.selected_product_ids,
+            payload.conversation_context,
+            payload.thread_id,
+        )
     except AgentServiceUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except AgentExecutionError as exc:

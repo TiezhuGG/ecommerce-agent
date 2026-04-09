@@ -7,6 +7,7 @@ const props = defineProps<{
   result: AgentResult | null;
   loading: boolean;
   errorMessage: string;
+  currentThreadId: string | null;
   conversationContext: AgentConversationTurn[];
 }>();
 
@@ -57,6 +58,9 @@ function submitPrompt() {
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <span v-if="currentThreadId" class="chip bg-emerald-100 text-emerald-800">
+            当前线程：{{ currentThreadId }}
+          </span>
           <span class="chip bg-slate-100 text-slate-700">
             {{ conversationContext.length }} 轮已缓存
           </span>

@@ -69,6 +69,10 @@ class AgentChatRequest(BaseModel):
         default_factory=list,
         description="Currently selected products from the frontend workbench",
     )
+    thread_id: str | None = Field(
+        default=None,
+        description="Optional conversation thread ID for continuing an existing session",
+    )
     conversation_context: list[AgentConversationTurn] = Field(
         default_factory=list,
         description="Recent prior turns kept by the frontend session",
@@ -79,6 +83,7 @@ class AgentChatResponse(BaseModel):
     """Agent chat result."""
 
     message: str
+    thread_id: str
     selected_product_ids: list[str] = Field(default_factory=list)
     conversation_context: list[AgentConversationTurn] = Field(default_factory=list)
     route: str
@@ -102,6 +107,7 @@ class AgentRunDetailResponse(BaseModel):
     """Persisted agent run detail."""
 
     run_id: str
+    thread_id: str
     created_at: str
     message: str
     selected_product_ids: list[str] = Field(default_factory=list)
@@ -126,6 +132,7 @@ class AgentRunSummary(BaseModel):
     """Persisted agent run summary."""
 
     run_id: str
+    thread_id: str
     created_at: str
     message: str
     route: str

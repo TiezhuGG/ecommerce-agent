@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from typing import Any, Literal, TypedDict
 
 from app.catalog.service import search_products
@@ -178,6 +179,7 @@ def list_recent_agent_runs(limit: int = 10) -> AgentRunListResponse:
     items = [
         AgentRunSummary(
             run_id=str(row["run_id"]),
+            thread_id=str(row.get("thread_id", row["run_id"])),
             created_at=str(row["created_at"]),
             message=str(row["message"]),
             route=str(row["route"]),
@@ -215,6 +217,7 @@ def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
 
     return AgentRunDetailResponse(
         run_id=str(row["run_id"]),
+        thread_id=str(row.get("thread_id", row["run_id"])),
         created_at=str(row["created_at"]),
         message=str(row["message"]),
         selected_product_ids=list(row["selected_product_ids"])
@@ -310,6 +313,13 @@ def _collect_context_product_ids(conversation_context: list[AgentConversationTur
         collected.extend(turn.selected_product_ids)
         collected.extend(turn.recommended_product_ids)
     return list(dict.fromkeys(collected))
+
+
+def _resolve_thread_id(thread_id: str | None) -> str:
+    normalized = (thread_id or "").strip()
+    if normalized:
+        return normalized
+    return f"thread-{uuid.uuid4().hex[:12]}"
 
 
 def _append_tool_call(
@@ -804,6 +814,7 @@ def run_agent_chat(
     message: str,
     selected_product_ids: list[str],
     conversation_context: list[AgentConversationTurn] | None = None,
+    thread_id: str | None = None,
 ) -> AgentChatResponse:
     """执行一轮 LangGraph Agent 对话。"""
 
@@ -811,6 +822,7 @@ def run_agent_chat(
     if precheck.status == "blocked":
         raise AgentServiceUnavailableError(precheck.summary)
 
+    resolved_thread_id = _resolve_thread_id(thread_id)
     trimmed_conversation_context = _trim_conversation_context(conversation_context or [])
 
     try:
@@ -834,6 +846,7 @@ def run_agent_chat(
     providers = _snapshot_providers(state)
     response = AgentChatResponse(
         message=message.strip(),
+        thread_id=resolved_thread_id,
         selected_product_ids=list(selected_product_ids),
         conversation_context=trimmed_conversation_context,
         route=state.get("route", "shopping"),
@@ -857,6 +870,7 @@ def run_agent_chat(
             run_id = persist_agent_run(
                 {
                     "message": response.message,
+                    "thread_id": response.thread_id,
                     "route": response.route,
                     "route_reasoning": response.route_reasoning,
                     "final_answer": response.final_answer,

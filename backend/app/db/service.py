@@ -197,6 +197,7 @@ def persist_agent_run(payload: dict[str, object]) -> str:
         session.add(
             AgentRunRecord(
                 id=run_id,
+                thread_id=str(payload.get("thread_id") or run_id),
                 created_at=created_at,
                 message=str(payload.get("message", "")),
                 route=str(payload.get("route", "")),
@@ -239,6 +240,7 @@ def _agent_run_row_to_payload(row: AgentRunRecord) -> dict[str, object]:
 
     return {
         "run_id": row.id,
+        "thread_id": row.thread_id,
         "created_at": row.created_at,
         "message": row.message,
         "route": row.route,
@@ -271,6 +273,16 @@ def ensure_agent_run_schema() -> None:
     columns = {column["name"] for column in inspect(engine).get_columns("agent_runs")}
 
     with session_scope() as session:
+        if "thread_id" not in columns:
+            session.execute(text("ALTER TABLE agent_runs ADD COLUMN thread_id TEXT"))
+            session.execute(
+                text(
+                    "UPDATE agent_runs "
+                    "SET thread_id = id "
+                    "WHERE thread_id IS NULL OR thread_id = ''"
+                )
+            )
+
         if "created_at" not in columns:
             session.execute(text("ALTER TABLE agent_runs ADD COLUMN created_at TEXT"))
             session.execute(

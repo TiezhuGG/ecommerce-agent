@@ -65,6 +65,7 @@ export type AgentResult = {
   origin: AgentResultOrigin;
   createdAt: string | null;
   message: string;
+  threadId: string;
   selectedProductIds: string[];
   conversationContext: AgentConversationTurn[];
   route: AgentRoute;
@@ -86,6 +87,7 @@ export type AgentResult = {
 
 export type AgentRunSummary = {
   runId: string;
+  threadId: string;
   createdAt: string;
   message: string;
   route: AgentRoute;

@@ -54,6 +54,7 @@ else:
         __tablename__ = "agent_runs"
 
         id: Mapped[str] = mapped_column(Text, primary_key=True)
+        thread_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
         created_at: Mapped[str] = mapped_column(Text, nullable=False, index=True)
         message: Mapped[str] = mapped_column(Text, nullable=False)
         route: Mapped[str] = mapped_column(Text, nullable=False, index=True)

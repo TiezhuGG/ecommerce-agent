@@ -68,6 +68,7 @@ function mapConversationTurn(turn: AgentConversationTurnResponse): AgentConversa
 function mapAgentRunSummary(item: AgentRunSummaryResponse): AgentRunSummary {
   return {
     runId: item.run_id,
+    threadId: item.thread_id,
     createdAt: item.created_at,
     message: item.message,
     route: item.route,
@@ -115,6 +116,7 @@ function mapAgentResultFromResponse(
     origin: options.origin,
     createdAt: options.createdAt,
     message: response.message,
+    threadId: response.thread_id,
     selectedProductIds: response.selected_product_ids,
     conversationContext: response.conversation_context.map(mapConversationTurn),
     route: response.route,
@@ -176,6 +178,7 @@ export async function chatWithAgent(
   message: string,
   selectedProductIds: string[],
   conversationContext: AgentConversationTurn[],
+  threadId: string | null,
 ): Promise<AgentResult> {
   const response = await requestJson<AgentChatResponse>("/agent/chat", {
     method: "POST",
@@ -184,6 +187,7 @@ export async function chatWithAgent(
     },
     body: JSON.stringify({
       message,
+      thread_id: threadId,
       selected_product_ids: selectedProductIds,
       conversation_context: conversationContext.map((turn) => ({
         user_message: turn.userMessage,

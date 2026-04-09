@@ -23,6 +23,7 @@ from app.faq.service import (
     list_faq_entries_admin,
     update_faq_entry,
 )
+from app.schemas.agent import AgentConversationTurn
 from app.schemas.faq import FaqEntryImportItem, FaqEntryImportRequest, FaqEntryUpsertRequest
 from app.intent.service import parse_intent
 from app.llm.service import LLMServiceUnavailableError
@@ -193,6 +194,7 @@ class RepositoryTests(unittest.TestCase):
 
         self.assertTrue(result.persisted)
         self.assertIsNotNone(result.run_id)
+        self.assertTrue(result.thread_id.startswith("thread-"))
         self.assertIsNotNone(AgentRunRecord)
         self.assertIsNotNone(ProductRecord)
         with session_scope() as session:
@@ -201,6 +203,7 @@ class RepositoryTests(unittest.TestCase):
             assert stored is not None
             self.assertEqual(stored.route, "faq")
             self.assertTrue(stored.created_at)
+            self.assertEqual(stored.thread_id, result.thread_id)
 
     def test_recent_agent_runs_are_listed_when_sqlite_backend_is_enabled(self) -> None:
         database_path = ROOT / ".tmp" / "test-agent-runs.db"
@@ -217,6 +220,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertGreaterEqual(len(history.items), 1)
         self.assertEqual(history.items[0].route, "faq")
         self.assertGreaterEqual(history.items[0].tool_call_count, 1)
+        self.assertTrue(history.items[0].thread_id)
 
     def test_agent_run_detail_is_available_when_sqlite_backend_is_enabled(self) -> None:
         database_path = ROOT / ".tmp" / "test-agent-run-detail.db"
@@ -236,6 +240,49 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(detail.persisted)
         self.assertGreaterEqual(len(detail.tool_calls), 1)
         self.assertEqual(detail.providers.retrieval_provider, "knowledge-rag-v1-local-retrieval")
+        self.assertEqual(detail.thread_id, result.thread_id)
+
+    def test_agent_thread_can_be_continued_and_restored_from_history(self) -> None:
+        database_path = ROOT / ".tmp" / "test-agent-thread-history.db"
+        database_url = f"sqlite:///{database_path.as_posix()}"
+        os.environ["DATABASE_URL"] = database_url
+        settings.database_url = database_url
+        get_repositories.cache_clear()
+        reset_db_runtime_state()
+
+        first = run_agent_chat("帮我推荐 2000 元内适合通勤的蓝牙耳机", [])
+        self.assertTrue(first.persisted)
+        self.assertTrue(first.thread_id.startswith("thread-"))
+
+        second = run_agent_chat(
+            "继续刚才那组里，更适合苹果生态的是哪个？",
+            [],
+            [
+                AgentConversationTurn(
+                    user_message=first.message,
+                    agent_answer=first.final_answer,
+                    route=first.route,
+                    selected_product_ids=first.selected_product_ids,
+                    recommended_product_ids=first.recommended_product_ids,
+                )
+            ],
+            first.thread_id,
+        )
+
+        self.assertTrue(second.persisted)
+        self.assertEqual(second.thread_id, first.thread_id)
+        self.assertIsNotNone(second.run_id)
+
+        history = list_recent_agent_runs(limit=10)
+        matching = [item for item in history.items if item.run_id == second.run_id]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0].thread_id, first.thread_id)
+
+        assert second.run_id is not None
+        detail = get_agent_run_detail(second.run_id)
+        self.assertEqual(detail.thread_id, first.thread_id)
+        self.assertEqual(len(detail.conversation_context), 1)
+        self.assertEqual(detail.conversation_context[0].user_message, first.message)
 
     def test_seed_database_inserts_missing_faq_entries_into_existing_sqlite(self) -> None:
         database_path = ROOT / ".tmp" / "test-seed-sync.db"
