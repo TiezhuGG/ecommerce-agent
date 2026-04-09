@@ -4,10 +4,17 @@ import json
 import sys
 from typing import Any, Literal, TypedDict
 
-from app.catalog.data import PRODUCT_CATALOG
 from app.catalog.service import search_products
 from app.compare.service import compare_products
 from app.config import settings
+from app.db.repositories import get_repositories
+from app.db.service import (
+    DatabaseUnavailableError,
+    SQLAlchemyError,
+    get_agent_run,
+    list_agent_runs,
+    persist_agent_run,
+)
 from app.faq.service import ask_faq
 from app.intent.service import (
     IntentParseError,
@@ -24,12 +31,15 @@ from app.llm.service import (
 )
 from app.schemas.agent import (
     AgentChatResponse,
+    AgentRunDetailResponse,
+    AgentRunListResponse,
+    AgentRunSummary,
     AgentPrecheckResponse,
     AgentToolCall,
     AgentToolStatus,
 )
 from app.schemas.compare import CompareResponse
-from app.schemas.faq import FaqAskResponse
+from app.schemas.faq import FaqAskResponse, FaqCitation
 from app.schemas.intent import IntentParseResponse
 
 
@@ -44,7 +54,17 @@ class AgentExecutionError(RuntimeError):
     """Agent 执行失败。"""
 
 
+class AgentRunHistoryUnavailableError(RuntimeError):
+    """Agent 运行历史当前不可用。"""
+
+
+class AgentRunNotFoundError(RuntimeError):
+    """指定的 Agent 运行记录不存在。"""
+
+
 class AgentGraphState(TypedDict, total=False):
+    """LangGraph 在节点之间传递的共享状态。"""
+
     message: str
     selected_product_ids: list[str]
     warnings: list[str]
@@ -62,30 +82,35 @@ class AgentGraphState(TypedDict, total=False):
 def get_agent_precheck() -> AgentPrecheckResponse:
     """汇总 Agent 运行前的关键环境信息。"""
 
+    repositories = get_repositories()
     warnings: list[str] = []
-    openai_ready = is_openai_sdk_available() and bool(settings.openai_api_key)
+    llm_ready = is_openai_sdk_available() and bool(settings.openai_api_key)
     langgraph_ready = is_langgraph_available()
 
     if not is_openai_sdk_available():
-        warnings.append("当前环境未安装 openai SDK，涉及模型推理的能力不可用。")
+        warnings.append("当前环境未安装 openai SDK，模型分类与总结会退回本地规则或模板。")
     if not settings.openai_api_key:
-        warnings.append("未配置 OPENAI_API_KEY，意图解析和 LLM 文本生成不可用。")
+        warnings.append("未配置 OPENAI_API_KEY，模型生成能力会退回本地规则或模板。")
     if not langgraph_ready:
-        warnings.append("当前环境未安装 langgraph，/agent/chat 暂时无法运行图编排。")
+        warnings.append("当前环境未安装 langgraph，/agent/chat 暂时无法执行图编排。")
     if not settings.openai_base_url:
-        warnings.append("当前未设置 OPENAI_BASE_URL，将使用 SDK 默认地址。")
+        warnings.append("当前未配置 OPENAI_BASE_URL，将使用 SDK 默认地址。")
     if sys.version_info >= (3, 14):
-        warnings.append("当前使用的是 Python 3.14；langchain-core 会输出兼容性警告，建议优先使用 Python 3.12 或 3.13。")
+        warnings.append(
+            "当前使用的是 Python 3.14+，部分三方依赖可能输出兼容性警告，但基础链路仍可运行。"
+        )
+    if settings.database_url.strip() and not repositories.backend.startswith("sqlalchemy-"):
+        warnings.append("已配置 DATABASE_URL，但当前数据库不可用，已回退到内存 seed 数据。")
 
     status = "ready"
-    summary = "Agent 运行条件完整，可执行 LangGraph 编排、意图解析和工具调用。"
+    summary = "Agent 运行条件完整，可执行 LangGraph 编排、意图解析和业务工具调用。"
 
     if not langgraph_ready:
         status = "blocked"
-        summary = "LangGraph 依赖缺失，Agent 编排尚不可用。"
-    elif not openai_ready:
+        summary = "LangGraph 依赖缺失，Agent 编排暂不可用。"
+    elif not llm_ready:
         status = "degraded"
-        summary = "基础业务工具可用，但 LLM 相关能力将退化或不可用。"
+        summary = "基础业务工具可用，模型相关节点会自动退回本地规则或模板。"
 
     tools = [
         AgentToolStatus(
@@ -94,9 +119,9 @@ def get_agent_precheck() -> AgentPrecheckResponse:
             description="基于结构化条件过滤商品目录，是导购推荐的事实来源。",
         ),
         AgentToolStatus(
-            name="FAQ 查询",
+            name="知识库问答",
             enabled=True,
-            description="回答售前政策、发票、保修、物流等规则问题。",
+            description="回答发票、退换货、保修、物流等售前规则问题，内部已升级为 RAG 第一版。",
         ),
         AgentToolStatus(
             name="商品对比",
@@ -105,8 +130,8 @@ def get_agent_precheck() -> AgentPrecheckResponse:
         ),
         AgentToolStatus(
             name="意图解析",
-            enabled=openai_ready,
-            description="把自然语言导购需求转成结构化筛选条件。",
+            enabled=True,
+            description="优先使用模型解析自然语言导购需求，失败时自动退回本地规则。",
         ),
         AgentToolStatus(
             name="LangGraph 编排",
@@ -123,9 +148,86 @@ def get_agent_precheck() -> AgentPrecheckResponse:
         api_style=settings.openai_api_style,
         openai_sdk_available=is_openai_sdk_available(),
         langgraph_available=langgraph_ready,
-        catalog_total=len(PRODUCT_CATALOG),
+        data_backend=repositories.backend,
+        agent_log_backend=repositories.backend if repositories.backend.startswith("sqlalchemy-") else "disabled",
+        catalog_total=len(repositories.products.list_products()),
         warnings=warnings,
         tools=tools,
+    )
+
+
+def list_recent_agent_runs(limit: int = 10) -> AgentRunListResponse:
+    """返回最近持久化的 Agent 运行记录。"""
+
+    repositories = get_repositories()
+    if not repositories.backend.startswith("sqlalchemy-"):
+        return AgentRunListResponse(backend="disabled", items=[])
+
+    try:
+        rows = list_agent_runs(limit)
+    except (DatabaseUnavailableError, SQLAlchemyError):
+        return AgentRunListResponse(backend="disabled", items=[])
+
+    items = [
+        AgentRunSummary(
+            run_id=str(row["run_id"]),
+            created_at=str(row["created_at"]),
+            message=str(row["message"]),
+            route=str(row["route"]),
+            final_answer_preview=str(row["final_answer"])[:140],
+            warning_count=len(row["warnings"]) if isinstance(row["warnings"], list) else 0,
+            tool_call_count=len(row["tool_calls"]) if isinstance(row["tool_calls"], list) else 0,
+            selected_product_ids=list(row["selected_product_ids"])
+            if isinstance(row["selected_product_ids"], list)
+            else [],
+            recommended_product_ids=list(row["recommended_product_ids"])
+            if isinstance(row["recommended_product_ids"], list)
+            else [],
+            provider=str(row["provider"]),
+            model=str(row["model"]),
+        )
+        for row in rows
+    ]
+    return AgentRunListResponse(backend=repositories.backend, items=items)
+
+
+def get_agent_run_detail(run_id: str) -> AgentRunDetailResponse:
+    """返回单次持久化 Agent 运行的完整详情。"""
+
+    repositories = get_repositories()
+    if not repositories.backend.startswith("sqlalchemy-"):
+        raise AgentRunHistoryUnavailableError("当前未启用数据库日志存储，无法查看运行详情。")
+
+    try:
+        row = get_agent_run(run_id)
+    except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+        raise AgentRunHistoryUnavailableError(f"当前无法读取 Agent 运行详情：{exc}") from exc
+
+    if row is None:
+        raise AgentRunNotFoundError(f"未找到 run_id={run_id} 对应的 Agent 运行记录。")
+
+    return AgentRunDetailResponse(
+        run_id=str(row["run_id"]),
+        created_at=str(row["created_at"]),
+        message=str(row["message"]),
+        selected_product_ids=list(row["selected_product_ids"])
+        if isinstance(row["selected_product_ids"], list)
+        else [],
+        route=str(row["route"]),
+        route_reasoning=str(row.get("route_reasoning", "")),
+        final_answer=str(row["final_answer"]),
+        warnings=list(row["warnings"]) if isinstance(row["warnings"], list) else [],
+        tool_calls=list(row["tool_calls"]) if isinstance(row["tool_calls"], list) else [],
+        parsed_intent=row["parsed_intent"] if isinstance(row.get("parsed_intent"), dict) else None,
+        recommended_product_ids=list(row["recommended_product_ids"])
+        if isinstance(row["recommended_product_ids"], list)
+        else [],
+        faq_result=row["faq_result"] if isinstance(row.get("faq_result"), dict) else None,
+        compare_result=row["compare_result"] if isinstance(row.get("compare_result"), dict) else None,
+        provider=str(row["provider"]),
+        model=str(row["model"]),
+        graph_runtime=str(row.get("graph_runtime", "langgraph")),
+        persisted=True,
     )
 
 
@@ -138,6 +240,8 @@ def _append_tool_call(
     input_payload: dict[str, Any] | None = None,
     output_payload: dict[str, Any] | None = None,
 ) -> None:
+    """向共享状态里追加一条工具调用轨迹。"""
+
     calls = list(state.get("tool_calls", []))
     calls.append(
         AgentToolCall(
@@ -152,20 +256,40 @@ def _append_tool_call(
 
 
 def _append_warning(state: AgentGraphState, message: str) -> None:
+    """向共享状态里追加一条执行警告。"""
+
     warnings = list(state.get("warnings", []))
     warnings.append(message)
     state["warnings"] = warnings
 
 
-def _detect_route_by_rules(message: str, selected_product_ids: list[str]) -> tuple[AgentRoute | None, str]:
+def _detect_route_by_rules(
+    message: str,
+    selected_product_ids: list[str],
+) -> tuple[AgentRoute | None, str]:
+    """先用简单规则做第一层路由判断。"""
+
     normalized = message.strip().lower()
 
     if len(selected_product_ids) >= 2:
         return "compare", "前端已经选中了至少 2 个商品，优先进入商品对比流程。"
 
-    faq_keywords = ["退货", "换货", "发票", "保修", "质保", "物流", "发货", "售后", "退款", "签收"]
+    faq_keywords = [
+        "退货",
+        "退款",
+        "换货",
+        "发票",
+        "专票",
+        "保修",
+        "质保",
+        "物流",
+        "发货",
+        "签收",
+        "售后",
+        "次日达",
+    ]
     if any(keyword in message for keyword in faq_keywords):
-        return "faq", "命中了售前政策与服务类关键词，适合走 FAQ 工具。"
+        return "faq", "命中了售前政策与服务类关键词，更适合进入知识库问答流程。"
 
     compare_keywords = ["对比", "比较", "区别", "差别", "选哪个", "怎么选", "pk"]
     if any(keyword in normalized for keyword in compare_keywords):
@@ -190,6 +314,8 @@ def _route_schema() -> dict[str, Any]:
 
 
 def _classify_route_with_llm(message: str) -> tuple[AgentRoute, str, str]:
+    """当规则不够确定时，再交给模型做路由分类。"""
+
     result = request_json_object(
         system_prompt=(
             "你是电商导购 Agent 的路由分类器。"
@@ -197,10 +323,7 @@ def _classify_route_with_llm(message: str) -> tuple[AgentRoute, str, str]:
             "faq 用于发票、退换货、保修、物流等规则说明；"
             "compare 用于对比、比较、选哪个、差异分析。"
         ),
-        user_prompt=(
-            f"用户消息：{message}\n"
-            "请输出 route 和 reasoning。"
-        ),
+        user_prompt=(f"用户消息：{message}\n请输出 route 和 reasoning。"),
         schema_name="agent_route_classifier",
         json_schema=_route_schema(),
     )
@@ -215,6 +338,8 @@ def _classify_route_with_llm(message: str) -> tuple[AgentRoute, str, str]:
 
 
 def _route_node(state: AgentGraphState) -> AgentGraphState:
+    """决定当前问题应该走哪条业务链路。"""
+
     message = state["message"]
     selected_product_ids = state.get("selected_product_ids", [])
 
@@ -264,17 +389,22 @@ def _route_node(state: AgentGraphState) -> AgentGraphState:
 
 
 def _shopping_node(state: AgentGraphState) -> AgentGraphState:
+    """导购节点：先做意图解析，再做商品搜索。"""
+
     message = state["message"]
     parsed_intent: IntentParseResponse | None = None
 
     try:
         parsed_intent = parse_intent(message)
         state["parsed_intent"] = parsed_intent
+        intent_summary = "已将自然语言导购需求解析为结构化筛选条件。"
+        if "fallback" in parsed_intent.provider.lower():
+            intent_summary = "模型不可用，已退回本地规则提取结构化筛选条件。"
         _append_tool_call(
             state,
             tool_name="intent_parse",
             status="completed",
-            summary="已将自然语言导购需求解析为结构化筛选条件。",
+            summary=intent_summary,
             input_payload={"query": message},
             output_payload={"applied_filters": parsed_intent.applied_filters},
         )
@@ -297,9 +427,8 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
         )
         product_result = search_products(keyword=message)
 
-    # 当模型给出的 keyword 过窄时，第一次搜索可能会 0 结果。
-    # 这里做一个最小放宽：保留分类、品牌、预算，只去掉关键词重新搜一次。
-    # 这样既保留了结构化约束，也避免因为单个关键词过严导致前端看起来“完全搜不到”。
+    # 模型给出的 keyword 偶尔会过窄，导致第一次搜索 0 结果。
+    # 这里做一次最小放宽：保留分类、品牌和预算，只移除 keyword 重新搜索。
     if (
         product_result.total == 0
         and parsed_intent
@@ -317,7 +446,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
         )
         if relaxed_result.total > 0:
             product_result = relaxed_result
-            _append_warning(state, "首次搜索结果过窄，已保留分类/品牌/预算并放宽关键词重新搜索。")
+            _append_warning(state, "首次搜索结果过窄，已保留分类、品牌和预算并放宽关键词后重新搜索。")
             _append_tool_call(
                 state,
                 tool_name="search_products_relaxed",
@@ -360,6 +489,11 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
         return state
 
     try:
+        parsed_intent_json = (
+            state["parsed_intent"].model_dump_json()
+            if state.get("parsed_intent")
+            else "无"
+        )
         answer = request_text(
             system_prompt=(
                 "你是电商导购助手。"
@@ -368,7 +502,7 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
             ),
             user_prompt=(
                 f"用户原始需求：{message}\n"
-                f"解析结果：{state.get('parsed_intent').model_dump_json() if state.get('parsed_intent') else '无'}\n"
+                f"解析结果：{parsed_intent_json}\n"
                 f"候选商品：{json.dumps([product.model_dump() for product in top_products], ensure_ascii=False)}\n"
                 "请输出 3 到 5 句中文说明，先总结需求，再说明推荐理由。"
             ),
@@ -382,37 +516,63 @@ def _shopping_node(state: AgentGraphState) -> AgentGraphState:
         state["final_answer"] = (
             f"我先根据你的需求筛出了 {product_result.total} 个候选商品。"
             f"当前更值得优先查看的是：{names}。"
-            "你可以继续结合价格、品牌和场景做下一轮筛选。"
+            "你可以继续结合价格、品牌和使用场景做下一轮筛选。"
         )
 
     return state
 
 
+def _serialize_citations(citations: list[FaqCitation]) -> list[dict[str, Any]]:
+    """把知识库引用整理成便于前端展示和调试的结构。"""
+
+    return [
+        {
+            "entry_id": citation.entry_id,
+            "title": citation.title,
+            "snippet": citation.snippet,
+            "source_label": citation.source_label,
+            "score": citation.score,
+        }
+        for citation in citations
+    ]
+
+
 def _faq_node(state: AgentGraphState) -> AgentGraphState:
+    """知识库节点：复用 FAQ / RAG 工具完成售前规则问答。"""
+
     result = ask_faq(state["message"])
     state["faq_result"] = result
     state["final_answer"] = result.answer
+
     _append_tool_call(
         state,
         tool_name="ask_faq",
         status="completed",
-        summary=f"已返回 FAQ 结果，来源为 {result.source_label}。",
+        summary=f"已完成知识库检索，命中来源为 {result.source_label}。",
         input_payload={"question": state["message"]},
-        output_payload={"source_label": result.source_label},
+        output_payload={
+            "source_label": result.source_label,
+            "retrieval_mode": result.retrieval_mode,
+            "citations": _serialize_citations(result.citations),
+        },
     )
     return state
 
 
 def _infer_compare_ids_from_message(message: str) -> list[str]:
+    """当用户没有手动勾选商品时，尝试从问题里识别商品名称。"""
+
     lowered = message.lower()
     matched_ids: list[str] = []
-    for product in PRODUCT_CATALOG:
+    for product in get_repositories().products.list_products():
         if product.name.lower() in lowered:
             matched_ids.append(product.id)
     return matched_ids
 
 
 def _compare_node(state: AgentGraphState) -> AgentGraphState:
+    """对比节点：根据已选商品或问题文本生成对比结果。"""
+
     selected_product_ids = state.get("selected_product_ids", [])
     candidate_ids = (
         selected_product_ids
@@ -450,20 +610,30 @@ def _compare_node(state: AgentGraphState) -> AgentGraphState:
 
 
 def _decide_next_after_route(state: AgentGraphState) -> str:
+    """告诉 LangGraph 路由节点之后该走向哪个业务节点。"""
+
     return state["route"]
 
 
 def _synthesize_node(state: AgentGraphState) -> AgentGraphState:
+    """把工具结果整理成更适合前端直接展示的最终答复。"""
+
     route = state.get("route", "shopping")
 
     if route == "faq" and state.get("faq_result"):
         faq_result = state["faq_result"]
-        if faq_result.matched_entry:
-            state["final_answer"] = (
-                f"{faq_result.answer}\n\n"
-                f"参考来源：{faq_result.source_label}\n"
-                "如果你还想继续追问，我也可以基于同一主题继续帮你展开。"
-            )
+        citation_lines = "\n".join(
+            f"- {citation.title}（{citation.source_label}）"
+            for citation in faq_result.citations[:3]
+        )
+
+        final_answer = faq_result.answer
+        if citation_lines:
+            final_answer += f"\n\n检索模式：{faq_result.retrieval_mode}\n参考来源：\n{citation_lines}"
+        if faq_result.suggestions:
+            final_answer += f"\n\n可继续追问：{'；'.join(faq_result.suggestions)}"
+
+        state["final_answer"] = final_answer
         return state
 
     if route == "compare" and state.get("compare_result"):
@@ -476,6 +646,8 @@ def _synthesize_node(state: AgentGraphState) -> AgentGraphState:
 
 
 def _build_graph():
+    """构建 LangGraph 单 Agent 编排图。"""
+
     try:
         from langgraph.graph import END, StateGraph
     except ImportError as exc:
@@ -531,8 +703,9 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
     except Exception as exc:
         raise AgentExecutionError(f"运行 LangGraph Agent 失败：{exc}") from exc
 
-    return AgentChatResponse(
+    response = AgentChatResponse(
         message=message.strip(),
+        selected_product_ids=list(selected_product_ids),
         route=state.get("route", "shopping"),
         route_reasoning=state.get("route_reasoning", ""),
         final_answer=state.get("final_answer", "本轮未生成可展示结果。"),
@@ -546,3 +719,31 @@ def run_agent_chat(message: str, selected_product_ids: list[str]) -> AgentChatRe
         model=settings.openai_model,
         graph_runtime="langgraph",
     )
+
+    repositories = get_repositories()
+    if repositories.backend.startswith("sqlalchemy-"):
+        try:
+            run_id = persist_agent_run(
+                {
+                    "message": response.message,
+                    "route": response.route,
+                    "route_reasoning": response.route_reasoning,
+                    "final_answer": response.final_answer,
+                    "warnings": response.warnings,
+                    "tool_calls": [tool_call.model_dump() for tool_call in response.tool_calls],
+                    "selected_product_ids": selected_product_ids,
+                    "recommended_product_ids": response.recommended_product_ids,
+                    "parsed_intent": response.parsed_intent.model_dump() if response.parsed_intent else None,
+                    "faq_result": response.faq_result.model_dump() if response.faq_result else None,
+                    "compare_result": response.compare_result.model_dump() if response.compare_result else None,
+                    "provider": response.provider,
+                    "model": response.model,
+                    "graph_runtime": response.graph_runtime,
+                }
+            )
+            response.run_id = run_id
+            response.persisted = True
+        except (DatabaseUnavailableError, SQLAlchemyError) as exc:
+            response.warnings.append(f"Agent 日志持久化失败，已跳过：{exc}")
+
+    return response

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "Ecommerce Agent API"
     app_env: str = "development"
     frontend_origin: str = "http://127.0.0.1:5173"
+    database_url: str = ""
 
     # 这里统一使用“兼容 OpenAI 协议”的配置命名。
     # 这样不管你接 OpenAI 官方、第三方中转网关，还是兼容 OpenAI 接口的国产模型平台，

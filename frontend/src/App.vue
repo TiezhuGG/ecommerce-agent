@@ -1,23 +1,29 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 
-import { fetchAgentPrecheck, chatWithAgent } from "./api/agent";
+import {
+  chatWithAgent,
+  fetchAgentPrecheck,
+  fetchAgentRunDetail,
+  fetchRecentAgentRuns,
+} from "./api/agent";
 import { requestJson } from "./api/client";
 import { compareProducts } from "./api/compare";
 import { askFaq } from "./api/faq";
 import type { CompareResponse } from "./api/contracts/compare";
-import type { FaqAskResponse } from "./api/contracts/faq";
 import { fetchProducts } from "./api/products";
 import AgentPrecheckCard from "./components/AgentPrecheckCard.vue";
 import AgentPromptPanel from "./components/AgentPromptPanel.vue";
+import AgentRunHistoryCard from "./components/AgentRunHistoryCard.vue";
 import ComparePanel from "./components/ComparePanel.vue";
 import FaqPanel from "./components/FaqPanel.vue";
 import HealthStatusCard from "./components/HealthStatusCard.vue";
 import ProductGrid from "./components/ProductGrid.vue";
 import SearchFiltersPanel from "./components/SearchFiltersPanel.vue";
 import { suggestedFaqQuestions } from "./data/mockFaqEntries";
-import type { AgentPrecheck, AgentResult } from "./types/agent";
+import type { AgentPrecheck, AgentResult, AgentRunHistory } from "./types/agent";
 import type { Product, SearchFilters } from "./types/catalog";
+import type { FaqAskResult } from "./types/faq";
 import type { HealthResponse } from "./types/system";
 
 const health = ref<HealthResponse | null>(null);
@@ -52,8 +58,14 @@ const compareErrorMessage = ref("");
 const agentResult = ref<AgentResult | null>(null);
 const agentLoading = ref(false);
 const agentErrorMessage = ref("");
+const agentRunHistory = ref<AgentRunHistory | null>(null);
+const agentRunHistoryLoading = ref(false);
+const agentRunHistoryErrorMessage = ref("");
+const selectedAgentRunId = ref<string | null>(null);
+const agentRunDetailLoading = ref(false);
+const agentRunDetailErrorMessage = ref("");
 
-const faqResult = ref<FaqAskResponse | null>(null);
+const faqResult = ref<FaqAskResult | null>(null);
 const faqLoading = ref(false);
 const faqErrorMessage = ref("");
 
@@ -80,7 +92,8 @@ async function loadHealth() {
   try {
     health.value = await requestJson<HealthResponse>("/health");
   } catch (error) {
-    healthErrorMessage.value = error instanceof Error ? error.message : "未知错误，无法访问后端。";
+    healthErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法访问后端。";
   } finally {
     healthLoading.value = false;
   }
@@ -101,6 +114,21 @@ async function loadAgentPrecheck() {
   }
 }
 
+async function loadAgentRunHistory() {
+  agentRunHistoryLoading.value = true;
+  agentRunHistoryErrorMessage.value = "";
+
+  try {
+    agentRunHistory.value = await fetchRecentAgentRuns();
+  } catch (error) {
+    agentRunHistory.value = null;
+    agentRunHistoryErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法加载 Agent 运行历史。";
+  } finally {
+    agentRunHistoryLoading.value = false;
+  }
+}
+
 async function loadProducts() {
   productsLoading.value = true;
   productsErrorMessage.value = "";
@@ -116,7 +144,8 @@ async function loadProducts() {
     selectedProductIds.value = selectedProductIds.value.filter((id) => currentIds.has(id));
   } catch (error) {
     products.value = [];
-    productsErrorMessage.value = error instanceof Error ? error.message : "未知错误，无法加载商品列表。";
+    productsErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法加载商品列表。";
   } finally {
     productsLoading.value = false;
   }
@@ -130,7 +159,8 @@ async function submitFaq(question: string) {
     faqResult.value = await askFaq(question);
   } catch (error) {
     faqResult.value = null;
-    faqErrorMessage.value = error instanceof Error ? error.message : "未知错误，无法查询 FAQ。";
+    faqErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法查询知识库。";
   } finally {
     faqLoading.value = false;
   }
@@ -144,7 +174,8 @@ async function loadCompare(productIds: string[]) {
     compareResult.value = await compareProducts(productIds);
   } catch (error) {
     compareResult.value = null;
-    compareErrorMessage.value = error instanceof Error ? error.message : "未知错误，无法生成商品对比。";
+    compareErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法生成商品对比。";
   } finally {
     compareLoading.value = false;
   }
@@ -180,34 +211,63 @@ function toggleCompare(productId: string) {
 async function runAgentPrompt(query: string) {
   agentLoading.value = true;
   agentErrorMessage.value = "";
+  agentRunDetailErrorMessage.value = "";
 
   try {
     const result = await chatWithAgent(query, selectedProductIds.value);
     agentResult.value = result;
+    selectedAgentRunId.value = result.runId;
     recommendedProductIds.value = result.recommendedProductIds;
-
-    // 当 Agent 在导购场景里完成了意图解析，就把结果回填到搜索筛选区。
-    // 这一步很关键，因为它体现了“模型负责理解，业务接口负责执行”的典型分层。
-    if (result.parsedIntent) {
-      filters.value = { ...result.parsedIntent.searchFilters };
-    }
-
-    // FAQ 路由命中后，直接把 FAQ 工具结果同步到 FAQ 面板，方便你观察工具复用。
-    if (result.faqResult) {
-      faqResult.value = result.faqResult;
-    }
-
-    // 对比路由命中后，把对比结果和商品选择状态同步到对比面板。
-    if (result.compareResult) {
-      compareResult.value = result.compareResult;
-      selectedProductIds.value = result.compareResult.compared_products.map((product) => product.id);
-    }
+    void loadAgentRunHistory();
   } catch (error) {
     agentResult.value = null;
-    agentErrorMessage.value = error instanceof Error ? error.message : "未知错误，无法完成 Agent 执行。";
+    agentErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法完成 Agent 执行。";
   } finally {
     agentLoading.value = false;
   }
+}
+
+async function inspectAgentRun(runId: string) {
+  agentRunDetailLoading.value = true;
+  agentRunDetailErrorMessage.value = "";
+  selectedAgentRunId.value = runId;
+
+  try {
+    const result = await fetchAgentRunDetail(runId);
+    agentResult.value = result;
+    recommendedProductIds.value = result.recommendedProductIds;
+  } catch (error) {
+    agentRunDetailErrorMessage.value =
+      error instanceof Error ? error.message : "未知错误，无法加载 Agent 运行详情。";
+  } finally {
+    agentRunDetailLoading.value = false;
+  }
+}
+
+function applyAgentFilters() {
+  if (!agentResult.value?.parsedIntent) {
+    return;
+  }
+
+  filters.value = { ...agentResult.value.parsedIntent.searchFilters };
+}
+
+function applyAgentFaqResult() {
+  if (!agentResult.value?.faqResult) {
+    return;
+  }
+
+  faqResult.value = agentResult.value.faqResult;
+}
+
+function applyAgentCompareResult() {
+  if (!agentResult.value?.compareResult) {
+    return;
+  }
+
+  compareResult.value = agentResult.value.compareResult;
+  selectedProductIds.value = agentResult.value.compareResult.compared_products.map((product) => product.id);
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -243,6 +303,7 @@ watch(
 onMounted(() => {
   void loadHealth();
   void loadAgentPrecheck();
+  void loadAgentRunHistory();
   void loadProducts();
   void submitFaq(suggestedFaqQuestions[0] ?? "支持七天无理由退换货吗？");
 });
@@ -256,20 +317,20 @@ onMounted(() => {
       <div class="grid gap-8 px-6 py-8 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-10">
         <div>
           <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-700">
-            电商导购 Agent / 第八轮迭代
+            电商导购 Agent / 第九轮迭代
           </p>
           <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-            接入 LangGraph 单 Agent 编排，把搜索、FAQ、对比和意图解析串成一条可观察的业务链路
+            升级 FAQ 为知识库检索，让 Agent 能返回“答案 + 引用片段”
           </h1>
           <p class="mt-5 max-w-3xl text-base leading-8 text-slate-600">
-            这一轮的重点不是再加一个独立接口，而是把已有工具能力真正编排起来。
-            Agent 会先判断当前问题属于导购、FAQ 还是商品对比，再决定调用哪一个业务工具，
-            并把执行轨迹完整展示在前端工作台里。
+            这一轮的重点不是再加一个孤立接口，而是把原来的 FAQ 工具升级成轻量 RAG。
+            后端会先做本地检索，再把命中的知识片段交给模型生成回答；即使模型失败，也还能基于片段走模板回退。
+            前端现在不仅能看到答案，还能看到检索模式、命中的知识片段和 Agent 的复用轨迹。
           </p>
 
           <div class="mt-6 flex flex-wrap gap-3">
             <span class="chip bg-amber-100 text-amber-800">商品搜索工具</span>
-            <span class="chip bg-sky-100 text-sky-800">FAQ 工具</span>
+            <span class="chip bg-sky-100 text-sky-800">知识库 RAG</span>
             <span class="chip bg-emerald-100 text-emerald-800">商品对比工具</span>
             <span class="chip bg-violet-100 text-violet-800">LangGraph 编排</span>
           </div>
@@ -280,10 +341,10 @@ onMounted(() => {
             本轮重点
           </p>
           <ul class="mt-5 space-y-4 text-sm leading-7 text-slate-200">
-            <li>1. 新增 `/agent/precheck`，先看环境和依赖是否满足 Agent 运行条件。</li>
-            <li>2. 新增 `/agent/chat`，把路由、工具调用和最终回答串进 LangGraph。</li>
-            <li>3. 前端意图解析面板升级为 Agent 工作台，展示完整执行轨迹。</li>
-            <li>4. 清理商品与 FAQ 数据源乱码，保证接口与页面都是正常中文。</li>
+            <li>1. FAQ 工具升级为知识库检索，返回命中的引用片段。</li>
+            <li>2. Agent 复用知识库结果，并把引用信息写入工具调用轨迹。</li>
+            <li>3. 前端知识库面板展示检索模式、引用片段和继续追问建议。</li>
+            <li>4. Agent 工作台补充知识库结果回填区，便于观察 RAG 链路。</li>
           </ul>
         </div>
       </div>
@@ -317,6 +378,19 @@ onMounted(() => {
           :loading="agentLoading"
           :error-message="agentErrorMessage"
           @submit="runAgentPrompt"
+          @apply-filters="applyAgentFilters"
+          @apply-faq="applyAgentFaqResult"
+          @apply-compare="applyAgentCompareResult"
+        />
+        <AgentRunHistoryCard
+          :history="agentRunHistory"
+          :loading="agentRunHistoryLoading"
+          :error-message="agentRunHistoryErrorMessage"
+          :selected-run-id="selectedAgentRunId"
+          :detail-loading="agentRunDetailLoading"
+          :detail-error-message="agentRunDetailErrorMessage"
+          @refresh="loadAgentRunHistory"
+          @inspect="inspectAgentRun"
         />
       </div>
     </section>

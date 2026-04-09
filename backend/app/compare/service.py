@@ -1,11 +1,12 @@
-from app.catalog.data import PRODUCT_CATALOG
+from app.db.repositories import get_repositories
 from app.schemas.compare import CompareResponse
 
 
 def compare_products(product_ids: list[str]) -> CompareResponse:
-    """按商品 id 做对比分析。"""
+    """Compare selected products by ID."""
 
-    product_map = {product.id: product for product in PRODUCT_CATALOG}
+    products = get_repositories().products.list_products()
+    product_map = {product.id: product for product in products}
     compared_products = [product_map[product_id] for product_id in product_ids if product_id in product_map]
 
     if len(compared_products) < 2:

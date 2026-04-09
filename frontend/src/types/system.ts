@@ -3,4 +3,5 @@ export type HealthResponse = {
   service: string;
   environment: string;
   phase: string;
+  data_backend?: string;
 };

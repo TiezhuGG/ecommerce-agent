@@ -66,6 +66,12 @@ const emit = defineEmits<{
         <p class="mt-3 text-xs text-slate-500">
           base_url：{{ precheck.baseUrl ?? "使用 SDK 默认地址" }}
         </p>
+        <p class="mt-2 text-xs text-slate-500">
+          data_backend：{{ precheck.dataBackend }}
+        </p>
+        <p class="mt-2 text-xs text-slate-500">
+          agent_log_backend：{{ precheck.agentLogBackend }}
+        </p>
       </div>
 
       <div class="mt-5">

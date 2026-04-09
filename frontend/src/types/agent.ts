@@ -1,9 +1,10 @@
 import type { CompareResponse } from "../api/contracts/compare";
-import type { FaqAskResponse } from "../api/contracts/faq";
 import type { SearchFilters } from "./catalog";
+import type { FaqAskResult } from "./faq";
 
 
 export type AgentRoute = "shopping" | "faq" | "compare";
+export type AgentResultOrigin = "live" | "history";
 
 export type ParsedIntentResult = {
   query: string;
@@ -38,13 +39,18 @@ export type AgentPrecheck = {
   apiStyle: string;
   openaiSdkAvailable: boolean;
   langgraphAvailable: boolean;
+  dataBackend: string;
+  agentLogBackend: string;
   catalogTotal: number;
   warnings: string[];
   tools: AgentToolStatus[];
 };
 
 export type AgentResult = {
+  origin: AgentResultOrigin;
+  createdAt: string | null;
   message: string;
+  selectedProductIds: string[];
   route: AgentRoute;
   routeReasoning: string;
   finalAnswer: string;
@@ -52,9 +58,30 @@ export type AgentResult = {
   toolCalls: AgentToolCall[];
   parsedIntent: ParsedIntentResult | null;
   recommendedProductIds: string[];
-  faqResult: FaqAskResponse | null;
+  faqResult: FaqAskResult | null;
   compareResult: CompareResponse | null;
   provider: string;
   model: string;
   graphRuntime: string;
+  runId: string | null;
+  persisted: boolean;
+};
+
+export type AgentRunSummary = {
+  runId: string;
+  createdAt: string;
+  message: string;
+  route: AgentRoute;
+  finalAnswerPreview: string;
+  warningCount: number;
+  toolCallCount: number;
+  selectedProductIds: string[];
+  recommendedProductIds: string[];
+  provider: string;
+  model: string;
+};
+
+export type AgentRunHistory = {
+  backend: string;
+  items: AgentRunSummary[];
 };

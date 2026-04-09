@@ -1,9 +1,9 @@
-from app.catalog.data import PRODUCT_CATALOG
+from app.db.repositories import get_repositories
 from app.schemas.products import ProductSearchResponse, ProductSummary
 
 
 def _matches_keyword(product: ProductSummary, keyword: str) -> bool:
-    """执行最小可解释的关键词匹配。"""
+    """Execute simple explainable keyword matching."""
 
     normalized = keyword.strip().lower()
     if not normalized:
@@ -28,11 +28,12 @@ def search_products(
     brand: str = "",
     max_price: int | None = None,
 ) -> ProductSearchResponse:
-    """按结构化条件搜索商品目录。"""
+    """Search products using structured filters."""
 
+    products = get_repositories().products.list_products()
     matched_items = [
         product
-        for product in PRODUCT_CATALOG
+        for product in products
         if _matches_keyword(product, keyword)
         and (not category or product.category == category)
         and (not brand or product.brand == brand)
@@ -53,6 +54,6 @@ def search_products(
         items=matched_items,
         total=len(matched_items),
         applied_filters=applied_filters,
-        available_categories=sorted({product.category for product in PRODUCT_CATALOG}),
-        available_brands=sorted({product.brand for product in PRODUCT_CATALOG}),
+        available_categories=sorted({product.category for product in products}),
+        available_brands=sorted({product.brand for product in products}),
     )

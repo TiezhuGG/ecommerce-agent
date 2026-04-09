@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 
-import type { FaqAskResponse } from "../api/contracts/faq";
+import type { FaqAskResult } from "../types/faq";
 
 const props = defineProps<{
   suggestedQuestions: string[];
-  result: FaqAskResponse | null;
+  result: FaqAskResult | null;
   loading: boolean;
   errorMessage: string;
 }>();
@@ -37,13 +37,18 @@ function submitFaq() {
 
 <template>
   <section class="panel p-6">
-    <h2 class="panel-title">售前 FAQ 区</h2>
-    <p class="muted-copy mt-2">
-      这块已经接入真实后端接口。它和商品搜索一样，都是后续 Agent 可以调用的业务工具，
-      只是它专门回答规则、政策和售前说明类问题。
-    </p>
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 class="panel-title">知识库问答台</h2>
+        <p class="muted-copy mt-2 max-w-3xl">
+          这一块已经不是传统“固定 FAQ 列表”，而是一个轻量的知识库检索入口。
+          你输入问题后，后端会先从本地知识文档里找出最相关的片段，再决定是让模型基于片段归纳答案，还是走模板回退。
+        </p>
+      </div>
+      <span class="chip bg-sky-100 text-sky-800">RAG 第一版</span>
+    </div>
 
-    <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+    <div class="mt-6 grid gap-4 xl:grid-cols-[0.88fr_1.12fr]">
       <div class="space-y-3">
         <button
           v-for="item in suggestedQuestions"
@@ -62,7 +67,7 @@ function submitFaq() {
           v-model="question"
           rows="4"
           class="field-input resize-none"
-          placeholder="例如：耳机进水后还能保修吗？"
+          placeholder="例如：企业采购可以开专票吗？"
         />
 
         <button
@@ -71,29 +76,62 @@ function submitFaq() {
           :disabled="loading"
           @click="submitFaq"
         >
-          {{ loading ? "查询中..." : "查询 FAQ" }}
+          {{ loading ? "知识库检索中..." : "查询知识库" }}
         </button>
 
         <p
           v-if="errorMessage"
           class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700"
         >
-          FAQ 查询失败：{{ errorMessage }}
+          知识库查询失败：{{ errorMessage }}
         </p>
 
-        <div v-else-if="result" class="mt-6 space-y-4">
+        <div v-else-if="result" class="mt-6 space-y-5">
           <div>
             <p class="text-sm font-semibold text-slate-700">问题</p>
             <p class="mt-2 text-base text-slate-900">{{ result.question }}</p>
           </div>
 
           <div>
-            <p class="text-sm font-semibold text-slate-700">答案</p>
-            <p class="mt-2 text-sm leading-7 text-slate-700">{{ result.answer }}</p>
+            <p class="text-sm font-semibold text-slate-700">回答</p>
+            <p class="mt-2 whitespace-pre-line text-sm leading-7 text-slate-700">
+              {{ result.answer }}
+            </p>
           </div>
 
-          <div>
-            <span class="chip bg-sky-100 text-sky-800">来源：{{ result.source_label }}</span>
+          <div class="flex flex-wrap gap-2">
+            <span class="chip bg-sky-100 text-sky-800">来源：{{ result.sourceLabel }}</span>
+            <span class="chip bg-violet-100 text-violet-800">
+              检索模式：{{ result.retrievalMode }}
+            </span>
+            <span
+              v-if="result.matchedEntry"
+              class="chip bg-emerald-100 text-emerald-800"
+            >
+              主题：{{ result.matchedEntry.topic }}
+            </span>
+          </div>
+
+          <div v-if="result.citations.length" class="rounded-3xl bg-white p-4">
+            <p class="text-sm font-semibold text-slate-700">命中的知识片段</p>
+            <div class="mt-4 grid gap-3">
+              <article
+                v-for="citation in result.citations"
+                :key="`${citation.entryId}-${citation.title}-${citation.score}`"
+                class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="chip bg-slate-100 text-slate-700">{{ citation.title }}</span>
+                  <span class="chip bg-amber-100 text-amber-800">
+                    得分：{{ citation.score.toFixed(2) }}
+                  </span>
+                  <span class="chip bg-sky-100 text-sky-800">{{ citation.sourceLabel }}</span>
+                </div>
+                <p class="mt-3 whitespace-pre-line text-sm leading-7 text-slate-700">
+                  {{ citation.snippet }}
+                </p>
+              </article>
+            </div>
           </div>
 
           <div v-if="result.suggestions.length">
