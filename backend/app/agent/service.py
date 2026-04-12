@@ -5,10 +5,10 @@ import sys
 import uuid
 from typing import Any, Literal, TypedDict
 
-from app.catalog.service import search_products
+from app.catalog.service import infer_product_ids_from_text, search_products
 from app.compare.service import compare_products
 from app.config import settings
-from app.db.repositories import get_repositories
+from app.db.repositories import get_database_runtime_info, get_repositories
 from app.db.service import (
     DatabaseUnavailableError,
     SQLAlchemyError,
@@ -96,6 +96,7 @@ def get_agent_precheck() -> AgentPrecheckResponse:
     """汇总 Agent 运行前的关键环境信息。"""
 
     repositories = get_repositories()
+    database_runtime = get_database_runtime_info()
     warnings: list[str] = []
     llm_ready = is_openai_sdk_available() and bool(settings.openai_api_key)
     langgraph_ready = is_langgraph_available()
@@ -112,8 +113,12 @@ def get_agent_precheck() -> AgentPrecheckResponse:
         warnings.append(
             "当前使用的是 Python 3.14+，部分三方依赖可能输出兼容性警告，但基础链路仍可运行。"
         )
-    if settings.database_url.strip() and not repositories.backend.startswith("sqlalchemy-"):
-        warnings.append("已配置 DATABASE_URL，但当前数据库不可用，已回退到内存 seed 数据。")
+    if database_runtime.status == "seed-only":
+        warnings.append(database_runtime.message)
+    elif database_runtime.status == "fallback-seed":
+        warnings.append(database_runtime.message)
+    elif database_runtime.configured_backend == "sqlite":
+        warnings.append("当前使用 SQLite 持久化数据，适合本地开发；上线前建议切换到 PostgreSQL。")
 
     status = "ready"
     summary = "Agent 运行条件完整，可执行 LangGraph 编排、意图解析和业务工具调用。"
@@ -162,6 +167,10 @@ def get_agent_precheck() -> AgentPrecheckResponse:
         openai_sdk_available=is_openai_sdk_available(),
         langgraph_available=langgraph_ready,
         data_backend=repositories.backend,
+        database_configured_backend=database_runtime.configured_backend,
+        database_runtime_status=database_runtime.status,
+        database_runtime_message=database_runtime.message,
+        database_persistence_enabled=database_runtime.persistence_enabled,
         agent_log_backend=repositories.backend if repositories.backend.startswith("sqlalchemy-") else "disabled",
         catalog_total=len(repositories.products.list_products()),
         warnings=warnings,
@@ -915,12 +924,7 @@ def _faq_node(state: AgentGraphState) -> AgentGraphState:
 def _infer_compare_ids_from_message(message: str) -> list[str]:
     """当用户没有手动勾选商品时，尝试从问题里识别商品名称。"""
 
-    lowered = message.lower()
-    matched_ids: list[str] = []
-    for product in get_repositories().products.list_products():
-        if product.name.lower() in lowered:
-            matched_ids.append(product.id)
-    return matched_ids
+    return infer_product_ids_from_text(message, limit=3)
 
 
 def _compare_node(state: AgentGraphState) -> AgentGraphState:

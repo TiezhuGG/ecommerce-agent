@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.admin.security import require_admin_access
 from app.agent.service import (
     AgentExecutionError,
     AgentRunHistoryUnavailableError,
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 @router.get("/precheck", response_model=AgentPrecheckResponse)
-async def get_agent_precheck_endpoint() -> AgentPrecheckResponse:
+async def get_agent_precheck_endpoint(_: None = Depends(require_admin_access)) -> AgentPrecheckResponse:
     """查看 Agent 当前是否具备运行条件。"""
 
     return get_agent_precheck()

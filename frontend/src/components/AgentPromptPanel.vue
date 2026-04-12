@@ -9,6 +9,7 @@ const props = defineProps<{
   errorMessage: string;
   currentThreadId: string | null;
   conversationContext: AgentConversationTurn[];
+  showDevDetails: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -20,6 +21,11 @@ const emit = defineEmits<{
 }>();
 
 const prompt = ref("帮我推荐 2000 元以内、适合通勤和开会的蓝牙耳机，优先考虑降噪和佩戴舒适。");
+const starterPrompts = [
+  "预算 3000 元左右，想买一台适合 MacBook 办公的显示器，优先轻薄和护眼。",
+  "帮我推荐适合出差的蓝牙耳机，预算 1500 元以内，重点看降噪和佩戴舒适。",
+  "家里客厅想买一台电视，预算 5000 元左右，主要看电影和游戏体验。",
+];
 
 const usedConversationContext = computed(
   () => props.result?.conversationContext ?? props.conversationContext,
@@ -35,16 +41,16 @@ const rememberedFilters = computed(() => {
 
   const items: string[] = [];
   if (state.searchFilters.category) {
-    items.push("分类: " + state.searchFilters.category);
+    items.push(`分类: ${state.searchFilters.category}`);
   }
   if (state.searchFilters.brand) {
-    items.push("品牌: " + state.searchFilters.brand);
+    items.push(`品牌: ${state.searchFilters.brand}`);
   }
   if (state.searchFilters.maxPrice !== null) {
-    items.push("预算: ￥" + state.searchFilters.maxPrice);
+    items.push(`预算上限: CNY ${state.searchFilters.maxPrice}`);
   }
   if (state.searchFilters.keyword) {
-    items.push("关键词: " + state.searchFilters.keyword);
+    items.push(`关键词: ${state.searchFilters.keyword}`);
   }
   return items;
 });
@@ -74,14 +80,17 @@ function formatRoute(route: AgentRoute | ""): string {
 
 <template>
   <section class="panel p-6">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h2 class="panel-title">告诉 AI 你的需求</h2>
-        <p class="muted-copy mt-2">
-          直接描述预算、使用场景和偏好，或者基于上一次结果继续追问，比如“换个品牌”“预算放宽一点”“把刚才那两款再比较一下”。
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div class="max-w-3xl">
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-700">
+          AI Guide
+        </p>
+        <h2 class="mt-3 text-2xl font-semibold text-ink">告诉 AI 你的需求</h2>
+        <p class="mt-3 text-sm leading-7 text-slate-600">
+          直接描述预算、使用场景和偏好，或者基于上一轮结果继续追问，比如“换个品牌”“预算放宽一点”或“把刚才那两款再比较一下”。
         </p>
       </div>
-      <span class="chip bg-violet-100 text-violet-800">可连续追问</span>
+      <span class="chip bg-violet-100 text-violet-800">支持连续追问</span>
     </div>
 
     <div class="mt-5 rounded-3xl bg-slate-50 p-5">
@@ -89,7 +98,7 @@ function formatRoute(route: AgentRoute | ""): string {
         <div>
           <p class="text-sm font-semibold text-slate-800">当前会话</p>
           <p class="mt-2 text-sm leading-7 text-slate-600">
-            系统会自动带上最近 4 轮上下文，适合连续追问，不用每次都把前情重新说一遍。
+            系统会自动带上最近几轮上下文，适合连续追问，不需要每次都把前情重新说一遍。
           </p>
         </div>
 
@@ -98,12 +107,12 @@ function formatRoute(route: AgentRoute | ""): string {
             会话进行中
           </span>
           <span class="chip bg-slate-100 text-slate-700">
-            已记住 {{ conversationContext.length }} 轮
+            已记住 {{ usedConversationContext.length }} 轮
           </span>
           <button
             type="button"
             class="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="!conversationContext.length"
+            :disabled="!usedConversationContext.length"
             @click="emit('clearConversation')"
           >
             开始新会话
@@ -122,11 +131,11 @@ function formatRoute(route: AgentRoute | ""): string {
       </div>
 
       <div
-        v-if="conversationContext.length"
+        v-if="usedConversationContext.length"
         class="mt-4 max-h-[320px] space-y-3 overflow-y-auto pr-1"
       >
         <article
-          v-for="(turn, index) in conversationContext"
+          v-for="(turn, index) in usedConversationContext"
           :key="index + '-' + turn.userMessage"
           class="rounded-2xl border border-slate-200 bg-white p-4"
         >
@@ -147,7 +156,7 @@ function formatRoute(route: AgentRoute | ""): string {
         v-else
         class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-600"
       >
-        还没有历史上下文。直接输入你的需求即可开始。
+        还没有历史上下文。直接输入你的需求就可以开始。
       </div>
     </div>
 
@@ -155,7 +164,7 @@ function formatRoute(route: AgentRoute | ""): string {
       v-model="prompt"
       rows="5"
       class="field-input mt-6 resize-none"
-      placeholder="例如：给我找一款适合 MacBook 办公、预算 3000 元左右、最好轻一点的显示器。"
+      placeholder="例如: 给我找一款适合 MacBook 办公、预算 3000 元左右、最好轻一点的显示器。"
       @keydown.ctrl.enter="submitPrompt"
     />
 
@@ -171,18 +180,51 @@ function formatRoute(route: AgentRoute | ""): string {
       <span class="chip bg-slate-100 text-slate-700">支持 Ctrl + Enter 快速提交</span>
     </div>
 
-    <p
+    <div
       v-if="errorMessage"
-      class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700"
+      class="mt-6 rounded-3xl border border-rose-200 bg-rose-50 p-5"
     >
-      执行失败：{{ errorMessage }}
-    </p>
+      <span class="chip bg-rose-100 text-rose-700">本次推荐没有成功</span>
+      <p class="mt-4 text-lg font-semibold text-rose-900">AI 暂时没能完成这次整理</p>
+      <p class="mt-3 text-sm leading-7 text-rose-800">
+        你可以先把需求写得更具体一点，比如补充预算、使用场景或品牌偏好，再试一次。
+      </p>
+      <p class="mt-4 rounded-2xl bg-white/80 px-4 py-3 text-sm text-rose-700">
+        {{ errorMessage }}
+      </p>
+    </div>
+
+    <div
+      v-else-if="loading && !result"
+      class="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="chip bg-amber-100 text-amber-800">AI 正在整理建议</span>
+        <span class="chip bg-white text-slate-700">通常只需要几秒</span>
+      </div>
+
+      <p class="mt-4 text-lg font-semibold text-amber-950">正在理解你的需求并筛选候选商品</p>
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
+        <article class="rounded-3xl bg-white/90 p-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">步骤 1</p>
+          <p class="mt-2 text-sm font-semibold text-slate-900">提取预算、场景和偏好重点</p>
+        </article>
+        <article class="rounded-3xl bg-white/90 p-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">步骤 2</p>
+          <p class="mt-2 text-sm font-semibold text-slate-900">匹配商品事实和可用知识</p>
+        </article>
+        <article class="rounded-3xl bg-white/90 p-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">步骤 3</p>
+          <p class="mt-2 text-sm font-semibold text-slate-900">生成推荐理由和下一步建议</p>
+        </article>
+      </div>
+    </div>
 
     <div v-else-if="result" class="mt-6 space-y-5">
       <div class="rounded-3xl bg-slate-50 p-5">
         <div class="flex flex-wrap gap-2">
           <span class="chip bg-emerald-100 text-emerald-800">
-            本次任务：{{ formatRoute(result.route) }}
+            本次任务: {{ formatRoute(result.route) }}
           </span>
           <span
             class="chip"
@@ -217,7 +259,7 @@ function formatRoute(route: AgentRoute | ""): string {
         </div>
 
         <p v-if="result.parsedIntent.scenario" class="mt-4 text-sm leading-7 text-slate-700">
-          使用场景：{{ result.parsedIntent.scenario }}
+          使用场景: {{ result.parsedIntent.scenario }}
         </p>
 
         <div v-if="result.parsedIntent.priorities.length" class="mt-4 flex flex-wrap gap-2">
@@ -312,14 +354,14 @@ function formatRoute(route: AgentRoute | ""): string {
         </div>
       </div>
 
-      <details class="rounded-3xl bg-slate-50 p-5">
+      <details v-if="showDevDetails" class="rounded-3xl bg-slate-50 p-5">
         <summary class="cursor-pointer text-sm font-semibold text-slate-700">
-          查看分析过程与技术细节
+          查看分析过程与详细信息
         </summary>
 
         <div class="mt-5 space-y-5">
           <div class="flex flex-wrap gap-2">
-            <span class="chip bg-slate-100 text-slate-700">route：{{ result.route }}</span>
+            <span class="chip bg-slate-100 text-slate-700">route: {{ result.route }}</span>
             <span class="chip bg-sky-100 text-sky-800">{{ result.provider }}</span>
             <span class="chip bg-amber-100 text-amber-800">{{ result.model }}</span>
             <span class="chip bg-violet-100 text-violet-800">{{ result.graphRuntime }}</span>
@@ -333,9 +375,9 @@ function formatRoute(route: AgentRoute | ""): string {
 
           <div v-if="result.runId || result.createdAt" class="rounded-2xl bg-white p-4">
             <p class="text-sm font-semibold text-slate-700">运行信息</p>
-            <p v-if="result.runId" class="mt-2 text-sm text-slate-600">run_id：{{ result.runId }}</p>
+            <p v-if="result.runId" class="mt-2 text-sm text-slate-600">run_id: {{ result.runId }}</p>
             <p v-if="result.createdAt" class="mt-1 text-sm text-slate-600">
-              created_at：{{ result.createdAt }}
+              created_at: {{ result.createdAt }}
             </p>
           </div>
 
@@ -359,7 +401,7 @@ function formatRoute(route: AgentRoute | ""): string {
 
             <div v-if="currentThreadState.candidateProductIds.length" class="mt-4">
               <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                candidate products
+                Candidate Products
               </p>
               <div class="mt-2 flex flex-wrap gap-2">
                 <span
@@ -405,7 +447,7 @@ function formatRoute(route: AgentRoute | ""): string {
 
             <div v-if="result.recommendedProductIds.length" class="mt-3">
               <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                recommended
+                Recommended
               </p>
               <div class="mt-2 flex flex-wrap gap-2">
                 <span
@@ -420,13 +462,13 @@ function formatRoute(route: AgentRoute | ""): string {
 
             <div v-if="result.selectedProductIds.length" class="mt-4">
               <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                selected
+                Selected
               </p>
               <div class="mt-2 flex flex-wrap gap-2">
                 <span
                   v-for="productId in result.selectedProductIds"
                   :key="'selected-' + productId"
-                  class="chip bg-slate-100 text-slate-700"
+                  class="chip bg-sky-100 text-sky-800"
                 >
                   {{ productId }}
                 </span>
@@ -434,76 +476,52 @@ function formatRoute(route: AgentRoute | ""): string {
             </div>
           </div>
 
-          <div class="rounded-2xl bg-white p-4">
-            <p class="text-sm font-semibold text-slate-700">阶段来源</p>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <span v-if="result.providers.routeProvider" class="chip bg-slate-100 text-slate-700">
-                route: {{ result.providers.routeProvider }}
-              </span>
-              <span v-if="result.providers.intentProvider" class="chip bg-sky-100 text-sky-800">
-                intent: {{ result.providers.intentProvider }}
-              </span>
-              <span v-if="result.providers.answerProvider" class="chip bg-amber-100 text-amber-800">
-                answer: {{ result.providers.answerProvider }}
-              </span>
-              <span
-                v-if="result.providers.retrievalProvider"
-                class="chip bg-violet-100 text-violet-800"
-              >
-                retrieval: {{ result.providers.retrievalProvider }}
-              </span>
-            </div>
-          </div>
-
-          <div class="rounded-2xl bg-white p-4">
-            <p class="text-sm font-semibold text-slate-700">工具调用轨迹</p>
-            <div class="mt-4 grid gap-3">
+          <div v-if="result.toolCalls.length" class="rounded-2xl bg-white p-4">
+            <p class="text-sm font-semibold text-slate-700">工具调用摘要</p>
+            <div class="mt-4 space-y-3">
               <article
-                v-for="toolCall in result.toolCalls"
-                :key="toolCall.toolName + '-' + toolCall.summary"
+                v-for="(toolCall, index) in result.toolCalls"
+                :key="toolCall.toolName + '-' + index"
                 class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
               >
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="chip bg-slate-100 text-slate-700">{{ toolCall.toolName }}</span>
-                  <span
-                    class="chip"
-                    :class="
-                      toolCall.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : toolCall.status === 'failed'
-                          ? 'bg-rose-100 text-rose-700'
-                          : 'bg-amber-100 text-amber-800'
-                    "
-                  >
-                    {{ toolCall.status }}
-                  </span>
+                <div class="flex flex-wrap gap-2">
+                  <span class="chip bg-slate-100 text-slate-700">#{{ index + 1 }}</span>
+                  <span class="chip bg-sky-100 text-sky-800">{{ toolCall.toolName }}</span>
+                  <span class="chip bg-amber-100 text-amber-800">{{ toolCall.status }}</span>
                 </div>
-
                 <p class="mt-3 text-sm leading-7 text-slate-700">{{ toolCall.summary }}</p>
-
-                <div class="mt-3 grid gap-3 md:grid-cols-2">
-                  <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      输入
-                    </p>
-                    <pre class="mt-2 overflow-x-auto rounded-2xl bg-white p-3 text-xs text-slate-600">{{
-                      JSON.stringify(toolCall.inputPayload, null, 2)
-                    }}</pre>
-                  </div>
-                  <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      输出
-                    </p>
-                    <pre class="mt-2 overflow-x-auto rounded-2xl bg-white p-3 text-xs text-slate-600">{{
-                      JSON.stringify(toolCall.outputPayload, null, 2)
-                    }}</pre>
-                  </div>
-                </div>
               </article>
             </div>
           </div>
         </div>
       </details>
+    </div>
+
+    <div
+      v-else
+      class="mt-6 rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6"
+    >
+      <span class="chip bg-slate-100 text-slate-700">还没有生成推荐</span>
+      <h3 class="mt-4 text-2xl font-semibold text-ink">先把你的需求告诉 AI</h3>
+      <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+        写得越接近真实购买场景，AI 给出的推荐就越实用。你可以直接说明预算、用途、在意的参数，
+        也可以先点下面的示例句式，再按自己的需要改一改。
+      </p>
+
+      <div class="mt-5 grid gap-3 lg:grid-cols-3">
+        <button
+          v-for="item in starterPrompts"
+          :key="item"
+          type="button"
+          class="rounded-3xl border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 hover:bg-slate-50"
+          @click="prompt = item"
+        >
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            示例问法
+          </p>
+          <p class="mt-3 text-sm leading-7 text-slate-800">{{ item }}</p>
+        </button>
+      </div>
     </div>
   </section>
 </template>

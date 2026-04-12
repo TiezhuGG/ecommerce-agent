@@ -1,3 +1,4 @@
+import { buildAdminAccessHeaders } from "../auth/adminAccess";
 import { requestJson } from "./client";
 import type {
   FaqAskResponse,
@@ -6,6 +7,7 @@ import type {
   FaqEntryResponse,
   FaqEntryImportResponse,
   FaqEntryListResponse,
+  FaqMatchSignalResponse,
 } from "./contracts/faq";
 import type {
   FaqAskResult,
@@ -15,6 +17,7 @@ import type {
   FaqEntryInput,
   FaqEntryListResult,
   FaqImportMode,
+  FaqMatchSignal,
 } from "../types/faq";
 
 
@@ -25,6 +28,7 @@ function mapFaqEntry(entry: FaqEntryResponse): FaqEntry {
     question: entry.question,
     answer: entry.answer,
     sourceLabel: entry.source_label,
+    questionAliases: entry.question_aliases,
     keywords: entry.keywords,
     body: entry.body,
   };
@@ -42,6 +46,16 @@ function mapFaqCitation(citation: FaqCitationResponse): FaqCitation {
 }
 
 
+function mapFaqMatchSignal(signal: FaqMatchSignalResponse): FaqMatchSignal {
+  return {
+    kind: signal.kind,
+    label: signal.label,
+    matchedValue: signal.matched_value,
+    detail: signal.detail,
+  };
+}
+
+
 export function mapFaqAskResponse(response: FaqAskResponse): FaqAskResult {
   return {
     question: response.question,
@@ -50,6 +64,7 @@ export function mapFaqAskResponse(response: FaqAskResponse): FaqAskResult {
     sourceLabel: response.source_label,
     suggestions: response.suggestions,
     citations: response.citations.map(mapFaqCitation),
+    matchSignals: response.match_signals.map(mapFaqMatchSignal),
     retrievalMode: response.retrieval_mode,
     retrievalProvider: response.retrieval_provider,
     answerProvider: response.answer_provider,
@@ -76,6 +91,7 @@ function mapFaqEntryInput(input: FaqEntryInput) {
     question: input.question,
     answer: input.answer,
     source_label: input.sourceLabel,
+    question_aliases: input.questionAliases,
     keywords: input.keywords,
     body: input.body,
   };
@@ -83,7 +99,9 @@ function mapFaqEntryInput(input: FaqEntryInput) {
 
 
 export async function fetchFaqEntries(): Promise<FaqEntryListResult> {
-  const response = await requestJson<FaqEntryListResponse>("/faq/entries");
+  const response = await requestJson<FaqEntryListResponse>("/faq/entries", {
+    headers: buildAdminAccessHeaders(),
+  });
   return {
     backend: response.backend,
     items: response.items.map(mapFaqEntry),
@@ -94,9 +112,9 @@ export async function fetchFaqEntries(): Promise<FaqEntryListResult> {
 export async function createFaqEntry(input: FaqEntryInput): Promise<FaqEntry> {
   const response = await requestJson<FaqEntryResponse>("/faq/entries", {
     method: "POST",
-    headers: {
+    headers: buildAdminAccessHeaders({
       "Content-Type": "application/json",
-    },
+    }),
     body: JSON.stringify(mapFaqEntryInput(input)),
   });
 
@@ -107,9 +125,9 @@ export async function createFaqEntry(input: FaqEntryInput): Promise<FaqEntry> {
 export async function updateFaqEntry(entryId: string, input: FaqEntryInput): Promise<FaqEntry> {
   const response = await requestJson<FaqEntryResponse>(`/faq/entries/${entryId}`, {
     method: "PUT",
-    headers: {
+    headers: buildAdminAccessHeaders({
       "Content-Type": "application/json",
-    },
+    }),
     body: JSON.stringify(mapFaqEntryInput(input)),
   });
 
@@ -120,12 +138,15 @@ export async function updateFaqEntry(entryId: string, input: FaqEntryInput): Pro
 export async function deleteFaqEntry(entryId: string): Promise<FaqDeleteResponse> {
   return requestJson<FaqDeleteResponse>(`/faq/entries/${entryId}`, {
     method: "DELETE",
+    headers: buildAdminAccessHeaders(),
   });
 }
 
 
 export async function exportFaqEntries(): Promise<FaqEntryListResult> {
-  const response = await requestJson<FaqEntryListResponse>("/faq/entries/export");
+  const response = await requestJson<FaqEntryListResponse>("/faq/entries/export", {
+    headers: buildAdminAccessHeaders(),
+  });
   return {
     backend: response.backend,
     items: response.items.map(mapFaqEntry),
@@ -139,9 +160,9 @@ export async function importFaqEntries(
 ): Promise<FaqEntryImportResult> {
   const response = await requestJson<FaqEntryImportResponse>("/faq/entries/import", {
     method: "POST",
-    headers: {
+    headers: buildAdminAccessHeaders({
       "Content-Type": "application/json",
-    },
+    }),
     body: JSON.stringify({
       mode,
       items: items.map((item) => ({
@@ -150,6 +171,7 @@ export async function importFaqEntries(
         question: item.question,
         answer: item.answer,
         source_label: item.sourceLabel,
+        question_aliases: item.questionAliases,
         keywords: item.keywords,
         body: item.body,
       })),

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { CompareResponse } from "../api/contracts/compare";
 import AgentPromptPanel from "../components/AgentPromptPanel.vue";
-import AgentRunHistoryCard from "../components/AgentRunHistoryCard.vue";
 import ComparePanel from "../components/ComparePanel.vue";
+import ConversationResumePanel from "../components/ConversationResumePanel.vue";
 import FaqPanel from "../components/FaqPanel.vue";
 import ProductGrid from "../components/ProductGrid.vue";
 import SearchFiltersPanel from "../components/SearchFiltersPanel.vue";
@@ -98,11 +98,11 @@ defineProps<{
             Shopper Guide
           </p>
           <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-            先筛商品，再让 AI 帮你缩小范围
+            先缩小范围，再让 AI 帮你挑
           </h1>
           <p class="mt-5 max-w-3xl text-base leading-8 text-slate-600">
-            现在首页只保留普通用户真正会用到的主链路：先筛条件，再描述需求，再看商品结果，
-            必要时做对比，最后查询售前问题。
+            首页只保留普通用户真正会用到的导购流程：先筛预算、分类和品牌，再告诉 AI 你的使用场景，
+            最后看商品结果、做对比，必要时再查售前问题。
           </p>
 
           <div class="mt-6 grid gap-3 sm:grid-cols-3">
@@ -127,7 +127,7 @@ defineProps<{
                 第三步
               </p>
               <p class="mt-2 text-base font-semibold text-slate-900">
-                选择商品做对比并继续追问
+                选商品做对比并继续追问
               </p>
             </div>
           </div>
@@ -161,8 +161,8 @@ defineProps<{
           <p class="mt-5 text-sm leading-7 text-slate-200">
             {{
               agent.currentThreadId
-                ? "当前已有进行中的会话，你可以继续追问，不需要从头重说一遍。"
-                : "还没有进行中的会话，直接输入需求即可开始。"
+                ? "当前已有进行中的会话，你可以继续追问，不需要从头再说一遍。"
+                : "还没有进行中的会话，直接输入需求就可以开始。"
             }}
           </p>
         </div>
@@ -174,7 +174,7 @@ defineProps<{
         <div>
           <h2 class="text-2xl font-semibold text-ink">核心操作区</h2>
           <p class="mt-1 text-sm leading-6 text-slate-600">
-            普通用户只看这里，就可以完成一次完整导购。
+            普通用户主要看这里，就可以完成一次完整导购。
           </p>
         </div>
 
@@ -206,6 +206,7 @@ defineProps<{
           :error-message="agent.errorMessage"
           :current-thread-id="agent.currentThreadId"
           :conversation-context="agent.conversationContext"
+          :show-dev-details="showDevPanels"
           @submit="submitAgentPrompt"
           @apply-filters="applyAgentFilters"
           @apply-faq="applyAgentFaqResult"
@@ -243,21 +244,41 @@ defineProps<{
         />
 
         <section v-else class="panel p-6">
-          <div class="flex h-full flex-col justify-between gap-5">
+          <div class="flex h-full flex-col justify-between gap-6">
             <div>
-              <h3 class="panel-title">对比区尚未激活</h3>
-              <p class="muted-copy mt-2">
-                从左侧商品列表里勾选 2 到 3 件商品后，这里会自动生成横向对比结果。
+              <span class="chip bg-slate-100 text-slate-700">等待加入对比</span>
+              <h3 class="mt-4 text-2xl font-semibold text-ink">对比区还没有内容</h3>
+              <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                从左侧商品结果里勾选 2 到 3 件你真正想比较的商品，这里就会自动展开横向对比，
+                帮你集中看差异、适合场景和推荐理由。
               </p>
             </div>
 
-            <div class="rounded-3xl bg-slate-50 p-5">
-              <p class="text-sm font-semibold text-slate-800">建议操作</p>
-              <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-600">
-                <li>1. 先在左侧缩小筛选范围。</li>
-                <li>2. 不确定时，先让 AI 给出推荐理由。</li>
-                <li>3. 最后挑 2 到 3 件商品做横向对比。</li>
-              </ul>
+            <div class="grid gap-3 sm:grid-cols-3">
+              <article class="rounded-3xl bg-slate-50 p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Step 1
+                </p>
+                <p class="mt-2 text-sm font-semibold text-slate-900">
+                  先用左侧筛选缩小预算、分类和品牌范围。
+                </p>
+              </article>
+              <article class="rounded-3xl bg-slate-50 p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Step 2
+                </p>
+                <p class="mt-2 text-sm font-semibold text-slate-900">
+                  不确定时，先让 AI 给出推荐理由和候选商品。
+                </p>
+              </article>
+              <article class="rounded-3xl bg-slate-50 p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Step 3
+                </p>
+                <p class="mt-2 text-sm font-semibold text-slate-900">
+                  最后挑 2 到 3 件商品加入对比，再看关键差异。
+                </p>
+              </article>
             </div>
           </div>
         </section>
@@ -282,42 +303,14 @@ defineProps<{
     </section>
 
     <section v-if="historyPanel.visible" class="space-y-4">
-      <details class="group" :open="Boolean(historyPanel.currentThreadId)">
-        <summary
-          class="panel flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5"
-        >
-          <div>
-            <h2 class="text-2xl font-semibold text-ink">继续上次会话</h2>
-            <p class="mt-1 text-sm leading-6 text-slate-600">
-              这里放线程历史和运行时间线，首屏不再默认展开。
-            </p>
-          </div>
-          <span class="chip bg-slate-100 text-slate-700 group-open:bg-amber-100 group-open:text-amber-800">
-            {{ historyPanel.currentThreadId ? "已展开当前会话" : "展开历史" }}
-          </span>
-        </summary>
-
-        <div class="mt-4">
-          <AgentRunHistoryCard
-            :history="historyPanel.history"
-            :thread-history="historyPanel.threadHistory"
-            :thread-detail="historyPanel.threadDetail"
-            :loading="historyPanel.loading"
-            :error-message="historyPanel.errorMessage"
-            :selected-run-id="historyPanel.selectedRunId"
-            :selected-thread-id="historyPanel.selectedThreadId"
-            :current-thread-id="historyPanel.currentThreadId"
-            :thread-detail-loading="historyPanel.threadDetailLoading"
-            :detail-loading="historyPanel.detailLoading"
-            :thread-detail-error-message="historyPanel.threadDetailErrorMessage"
-            :detail-error-message="historyPanel.detailErrorMessage"
-            @refresh="refreshHistory"
-            @inspect-thread="inspectAgentThread"
-            @inspect="inspectAgentRun"
-            @resume="resumeAgentThread"
-          />
-        </div>
-      </details>
+      <ConversationResumePanel
+        :history="historyPanel.threadHistory"
+        :loading="historyPanel.loading"
+        :error-message="historyPanel.errorMessage"
+        :current-thread-id="historyPanel.currentThreadId"
+        @refresh="refreshHistory"
+        @resume="resumeAgentThread"
+      />
     </section>
 
     <section class="space-y-4">
@@ -358,8 +351,8 @@ defineProps<{
 
       <section v-else class="panel p-5">
         <p class="text-sm leading-7 text-slate-600">
-          当前是用户视角，后台工作区默认隐藏。如需在生产环境开放，可在 `frontend/.env`
-          中显式设置 `VITE_SHOW_DEV_PANELS=true`。
+          当前是普通用户视角，后台工作区默认隐藏。如需在生产环境开放，可在
+          <code>frontend/.env</code> 中显式设置 <code>VITE_SHOW_DEV_PANELS=true</code>。
         </p>
       </section>
     </section>

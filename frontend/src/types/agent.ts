@@ -65,6 +65,10 @@ export type AgentPrecheck = {
   openaiSdkAvailable: boolean;
   langgraphAvailable: boolean;
   dataBackend: string;
+  databaseConfiguredBackend: string;
+  databaseRuntimeStatus: string;
+  databaseRuntimeMessage: string;
+  databasePersistenceEnabled: boolean;
   agentLogBackend: string;
   catalogTotal: number;
   warnings: string[];

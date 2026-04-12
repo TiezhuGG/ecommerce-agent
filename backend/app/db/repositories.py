@@ -74,6 +74,15 @@ class RepositoryBundle:
     backend: str
 
 
+@dataclass(slots=True)
+class DatabaseRuntimeInfo:
+    configured_backend: str
+    runtime_backend: str
+    status: str
+    message: str
+    persistence_enabled: bool
+
+
 def _build_in_memory_bundle() -> RepositoryBundle:
     return RepositoryBundle(
         products=InMemoryProductRepository(load_seed_products()),
@@ -89,6 +98,19 @@ def _database_backend_name() -> str:
     if scheme.startswith("sqlite"):
         return "sqlalchemy-sqlite"
     return "sqlalchemy-database"
+
+
+def _configured_database_backend_name() -> str:
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return "not-configured"
+
+    scheme = urlparse(database_url).scheme.lower()
+    if scheme.startswith("postgres"):
+        return "postgresql"
+    if scheme.startswith("sqlite"):
+        return "sqlite"
+    return scheme or "unknown"
 
 
 @lru_cache(maxsize=1)
@@ -119,4 +141,47 @@ def get_repositories() -> RepositoryBundle:
         products=InMemoryProductRepository(load_seed_products()),
         faq=InMemoryFaqRepository(load_seed_faq_entries()),
         backend="database-configured-fallback-seed",
+    )
+
+
+def get_database_runtime_info() -> DatabaseRuntimeInfo:
+    repositories = get_repositories()
+    configured_backend = _configured_database_backend_name()
+
+    if configured_backend == "not-configured":
+        return DatabaseRuntimeInfo(
+            configured_backend=configured_backend,
+            runtime_backend=repositories.backend,
+            status="seed-only",
+            message="未配置 DATABASE_URL，当前使用内存 seed 数据，重启后不会保留后台改动和 Agent 日志。",
+            persistence_enabled=False,
+        )
+
+    if repositories.backend.startswith("sqlalchemy-"):
+        if configured_backend == "sqlite":
+            message = "当前数据库已连通，正在使用 SQLite 持久化数据，适合本地开发和单机验证。"
+        elif configured_backend == "postgresql":
+            message = "当前数据库已连通，正在使用 PostgreSQL 持久化数据，适合上线环境。"
+        else:
+            message = "当前数据库已连通，后台数据和 Agent 日志会写入已配置数据库。"
+
+        return DatabaseRuntimeInfo(
+            configured_backend=configured_backend,
+            runtime_backend=repositories.backend,
+            status="ready",
+            message=message,
+            persistence_enabled=True,
+        )
+
+    if not SQLALCHEMY_AVAILABLE:
+        message = "已配置 DATABASE_URL，但当前环境缺少 SQLAlchemy 依赖，已回退到内存 seed 数据。"
+    else:
+        message = "已配置 DATABASE_URL，但当前数据库不可用，已回退到内存 seed 数据。"
+
+    return DatabaseRuntimeInfo(
+        configured_backend=configured_backend,
+        runtime_backend=repositories.backend,
+        status="fallback-seed",
+        message=message,
+        persistence_enabled=False,
     )

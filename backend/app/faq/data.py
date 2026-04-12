@@ -6,6 +6,13 @@ from app.schemas.faq import FaqEntry
 FAQ_ENTRIES: list[FaqEntry] = [
     FaqEntry(
         id="kb-return-policy",
+        question_aliases=[
+            "支持无理由退货吗",
+            "七天无理由退货吗",
+            "拆封了还能退吗",
+            "可以退货吗",
+            "可以换货吗",
+        ],
         topic="退换货",
         question="支持七天无理由退换货吗？",
         answer="除定制类和明确标注不支持七天无理由的商品外，大部分商品支持七天无理由退换货。",
@@ -21,6 +28,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-invoice-general",
+        question_aliases=[
+            "能开发票吗",
+            "发票怎么开",
+            "怎么申请发票",
+            "可以开电子发票吗",
+        ],
         topic="发票",
         question="可以开具发票吗？",
         answer="支持电子发票，提交订单后可在订单详情页申请开票。",
@@ -34,6 +47,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-invoice-enterprise",
+        question_aliases=[
+            "公司采购能开专票吗",
+            "企业能开增值税专票吗",
+            "能开专用发票吗",
+            "企业发票可以开专票吗",
+        ],
         topic="发票",
         question="企业采购可以开专票吗？",
         answer="企业采购场景可根据平台规则申请增值税专用发票，实际开票能力以商品与店铺规则为准。",
@@ -47,6 +66,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-warranty-general",
+        question_aliases=[
+            "保修多久",
+            "质保多久",
+            "能保修几年",
+            "保修期多长",
+        ],
         topic="保修",
         question="数码配件保修多久？",
         answer="不同品牌保修时长略有差异，默认可按 12 个月质保理解，具体以品牌规则和商品页说明为准。",
@@ -60,6 +85,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-warranty-damage",
+        question_aliases=[
+            "耳机进水还能保修吗",
+            "摔坏了还能保修吗",
+            "人为损坏能保修吗",
+            "进水后还能维修吗",
+        ],
         topic="保修",
         question="耳机进水后还能保修吗？",
         answer="因进水、跌落等人为损坏导致的问题，通常不在常规质保范围内。",
@@ -73,6 +104,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-delivery-general",
+        question_aliases=[
+            "多久发货",
+            "什么时候发货",
+            "什么时候寄出",
+            "现货多久能发",
+        ],
         topic="配送",
         question="一般多久能发货？",
         answer="常规现货商品通常会在 24 小时内完成发货，预售或缺货商品以页面说明为准。",
@@ -86,6 +123,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-delivery-fast",
+        question_aliases=[
+            "能次日达吗",
+            "能加急发货吗",
+            "今天下单明天能到吗",
+            "支持加急配送吗",
+        ],
         topic="配送",
         question="支持次日达或加急配送吗？",
         answer="部分地区和商品支持次日达或加急服务，具体以结算页展示的配送能力为准。",
@@ -99,6 +142,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-sign-receive-check",
+        question_aliases=[
+            "签收时发现包装破了怎么办",
+            "收货发现外包装破损怎么办",
+            "包裹破损怎么处理",
+            "快递包装坏了怎么办",
+        ],
         topic="配送",
         question="签收时发现外包装破损怎么办？",
         answer="建议先拍照留证并联系平台客服或店铺处理，必要时可在签收环节备注异常。",
@@ -112,6 +161,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-return-freight",
+        question_aliases=[
+            "退货运费谁出",
+            "换货邮费谁承担",
+            "退换货要自己出邮费吗",
+            "退货邮费怎么算",
+        ],
         topic="退换货",
         question="退换货运费一般由谁承担？",
         answer="如属商品质量问题或商家责任，通常由商家承担；非质量问题则以平台规则和活动说明为准。",
@@ -125,6 +180,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-return-time-limit",
+        question_aliases=[
+            "收到商品后多久内可以退货",
+            "售后申请有时间限制吗",
+            "签收后几天内能退货",
+            "多久之内可以申请售后",
+        ],
         topic="退换货",
         question="收到商品后多久内可以申请售后？",
         answer="常见售后申请时效会按签收时间起算，七天无理由通常需在签收后 7 天内发起。",
@@ -138,6 +199,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-invoice-modify",
+        question_aliases=[
+            "发票抬头写错了还能改吗",
+            "发票开错了怎么修改",
+            "发票信息填错了能重开吗",
+            "发票开错后还能改吗",
+        ],
         topic="发票",
         question="发票抬头开错了还能修改吗？",
         answer="是否可修改取决于订单状态和店铺规则，通常建议尽快联系平台或店铺处理。",
@@ -151,6 +218,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-invoice-separate",
+        question_aliases=[
+            "一个订单能分开发票吗",
+            "可以拆开发票吗",
+            "一单能开多张发票吗",
+            "订单发票可以分开开吗",
+        ],
         topic="发票",
         question="一个订单可以分开开发票吗？",
         answer="能否拆分开票取决于订单结构和店铺规则，实际以结算页和店铺开票能力为准。",
@@ -164,6 +237,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-warranty-serial-number",
+        question_aliases=[
+            "保修需要准备什么",
+            "售后维修要提供什么信息",
+            "申请保修要哪些资料",
+            "维修需要序列号吗",
+        ],
         topic="保修",
         question="申请保修需要准备哪些信息？",
         answer="通常建议准备订单信息、商品序列号、故障描述以及必要的图片或视频记录。",
@@ -190,6 +269,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-order-cancel",
+        question_aliases=[
+            "下单后还能取消吗",
+            "订单可以取消吗",
+            "还没发货可以取消订单吗",
+            "下错单了怎么取消",
+        ],
         topic="订单",
         question="下单后还能取消订单吗？",
         answer="是否能取消取决于订单状态，未发货订单通常更容易取消，已出库订单需以页面提示为准。",
@@ -203,6 +288,12 @@ FAQ_ENTRIES: list[FaqEntry] = [
     ),
     FaqEntry(
         id="kb-price-protect",
+        question_aliases=[
+            "降价了能补差价吗",
+            "订单降价后能价保吗",
+            "买完降价可以退差价吗",
+            "商品便宜了还能申请价保吗",
+        ],
         topic="价格保护",
         question="下单后商品降价了可以申请价保吗？",
         answer="是否支持价保取决于商品、店铺和活动规则，具体以订单页或活动说明为准。",

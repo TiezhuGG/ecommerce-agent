@@ -5,9 +5,10 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import lru_cache
+from pathlib import Path
 from typing import Iterator
 
-from app.config import settings
+from app.config import BACKEND_DIR, settings
 from app.db.models import AgentRunRecord, Base, FaqEntryRecord, ProductRecord, SQLALCHEMY_AVAILABLE
 from app.schemas.faq import FaqEntry
 from app.schemas.products import ProductSummary
@@ -33,12 +34,33 @@ class DatabaseUnavailableError(RuntimeError):
     """Raised when the configured database cannot be used."""
 
 
+def normalize_database_url(database_url: str) -> str:
+    normalized = database_url.strip()
+    if not normalized:
+        return normalized
+
+    sqlite_prefix = "sqlite:///"
+    if not normalized.startswith(sqlite_prefix):
+        return normalized
+
+    sqlite_path = normalized[len(sqlite_prefix) :]
+    if not sqlite_path or sqlite_path == ":memory:":
+        return normalized
+
+    candidate = Path(sqlite_path)
+    if candidate.is_absolute():
+        return normalized
+
+    resolved = (BACKEND_DIR / candidate).resolve()
+    return f"{sqlite_prefix}{resolved.as_posix()}"
+
+
 @lru_cache(maxsize=1)
 def get_engine():
     if not SQLALCHEMY_AVAILABLE:
         raise DatabaseUnavailableError("SQLAlchemy is not installed.")
 
-    database_url = settings.database_url.strip()
+    database_url = normalize_database_url(settings.database_url)
     if not database_url:
         raise DatabaseUnavailableError("DATABASE_URL is not configured.")
 
@@ -91,6 +113,7 @@ def _product_to_record(product: ProductSummary):
         price_note=product.price_note,
         summary=product.summary,
         scenario=product.scenario,
+        aliases_json=json.dumps(product.aliases, ensure_ascii=False),
         tags_json=json.dumps(product.tags, ensure_ascii=False),
         specs_json=json.dumps(product.specs, ensure_ascii=False),
         official_url=product.official_url,
@@ -107,6 +130,7 @@ def _faq_to_record(entry: FaqEntry):
         question=entry.question,
         answer=entry.answer,
         source_label=entry.source_label,
+        question_aliases_json=json.dumps(entry.question_aliases, ensure_ascii=False),
         keywords_json=json.dumps(entry.keywords, ensure_ascii=False),
         body=entry.body,
     )
@@ -122,6 +146,7 @@ def product_from_record(record) -> ProductSummary:
         price_note=record.price_note,
         summary=record.summary,
         scenario=record.scenario,
+        aliases=json.loads(getattr(record, "aliases_json", "[]") or "[]"),
         tags=json.loads(record.tags_json),
         specs=json.loads(record.specs_json),
         official_url=record.official_url,
@@ -135,6 +160,7 @@ def faq_from_record(record) -> FaqEntry:
         question=record.question,
         answer=record.answer,
         source_label=record.source_label,
+        question_aliases=json.loads(getattr(record, "question_aliases_json", "[]") or "[]"),
         keywords=json.loads(record.keywords_json),
         body=record.body,
     )
@@ -148,6 +174,8 @@ def initialize_database() -> tuple[bool, str]:
         engine = get_engine()
         assert Base.metadata is not None
         Base.metadata.create_all(engine)
+        ensure_product_schema()
+        ensure_faq_schema()
         ensure_agent_run_schema()
         seed_database_if_empty()
     except (DatabaseUnavailableError, SQLAlchemyError) as exc:
@@ -165,22 +193,49 @@ def seed_database_if_empty() -> None:
 
     assert select is not None
     with session_scope() as session:
-        existing_product_ids = set(session.scalars(select(ProductRecord.id)).all())
-        existing_faq_ids = set(session.scalars(select(FaqEntryRecord.id)).all())
+        product_rows = {
+            row.id: row
+            for row in session.scalars(select(ProductRecord)).all()
+        }
+        existing_product_ids = set(product_rows)
+        faq_rows = {
+            row.id: row
+            for row in session.scalars(select(FaqEntryRecord)).all()
+        }
+        existing_faq_ids = set(faq_rows)
 
-        missing_products = [
-            product for product in load_seed_products() if product.id not in existing_product_ids
-        ]
-        missing_faq_entries = [
-            entry for entry in load_seed_faq_entries() if entry.id not in existing_faq_ids
-        ]
+        missing_products = []
+        updated_product_aliases = False
+        for product in load_seed_products():
+            if product.id not in existing_product_ids:
+                missing_products.append(product)
+                continue
+
+            row = product_rows[product.id]
+            raw_aliases = getattr(row, "aliases_json", "") or ""
+            if product.aliases and raw_aliases in {"", "[]"}:
+                row.aliases_json = json.dumps(product.aliases, ensure_ascii=False)
+                updated_product_aliases = True
+
+        missing_faq_entries = []
+        updated_faq_aliases = False
+        for entry in load_seed_faq_entries():
+            if entry.id not in existing_faq_ids:
+                missing_faq_entries.append(entry)
+                continue
+
+            row = faq_rows[entry.id]
+            raw_aliases = getattr(row, "question_aliases_json", "") or ""
+            if entry.question_aliases and raw_aliases in {"", "[]"}:
+                row.question_aliases_json = json.dumps(entry.question_aliases, ensure_ascii=False)
+                updated_faq_aliases = True
 
         if missing_products:
             session.add_all(_product_to_record(product) for product in missing_products)
         if missing_faq_entries:
             session.add_all(_faq_to_record(entry) for entry in missing_faq_entries)
 
-        if missing_products or missing_faq_entries:
+        if missing_products or missing_faq_entries or updated_product_aliases or updated_faq_aliases:
             session.commit()
 
 
@@ -327,6 +382,60 @@ def ensure_agent_run_schema() -> None:
                     "conversation_context_json": json.dumps([], ensure_ascii=False),
                 },
             )
+        session.commit()
+
+
+def ensure_product_schema() -> None:
+    if not SQLALCHEMY_AVAILABLE:
+        raise DatabaseUnavailableError("SQLAlchemy is not installed.")
+    if ProductRecord is None:
+        raise DatabaseUnavailableError("Product model is unavailable.")
+    if inspect is None or text is None:
+        raise DatabaseUnavailableError("SQLAlchemy inspection utilities are unavailable.")
+
+    engine = get_engine()
+    columns = {column["name"] for column in inspect(engine).get_columns("products")}
+
+    if "aliases_json" in columns:
+        return
+
+    with session_scope() as session:
+        session.execute(text("ALTER TABLE products ADD COLUMN aliases_json TEXT"))
+        session.execute(
+            text(
+                "UPDATE products "
+                "SET aliases_json = :aliases_json "
+                "WHERE aliases_json IS NULL OR aliases_json = ''"
+            ),
+            {"aliases_json": json.dumps([], ensure_ascii=False)},
+        )
+        session.commit()
+
+
+def ensure_faq_schema() -> None:
+    if not SQLALCHEMY_AVAILABLE:
+        raise DatabaseUnavailableError("SQLAlchemy is not installed.")
+    if FaqEntryRecord is None:
+        raise DatabaseUnavailableError("FAQ model is unavailable.")
+    if inspect is None or text is None:
+        raise DatabaseUnavailableError("SQLAlchemy inspection utilities are unavailable.")
+
+    engine = get_engine()
+    columns = {column["name"] for column in inspect(engine).get_columns("faq_entries")}
+
+    if "question_aliases_json" in columns:
+        return
+
+    with session_scope() as session:
+        session.execute(text("ALTER TABLE faq_entries ADD COLUMN question_aliases_json TEXT"))
+        session.execute(
+            text(
+                "UPDATE faq_entries "
+                "SET question_aliases_json = :question_aliases_json "
+                "WHERE question_aliases_json IS NULL OR question_aliases_json = ''"
+            ),
+            {"question_aliases_json": json.dumps([], ensure_ascii=False)},
+        )
         session.commit()
 
 

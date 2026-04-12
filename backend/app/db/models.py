@@ -33,6 +33,7 @@ else:
         price_note: Mapped[str] = mapped_column(Text, nullable=False)
         summary: Mapped[str] = mapped_column(Text, nullable=False)
         scenario: Mapped[str] = mapped_column(Text, nullable=False)
+        aliases_json: Mapped[str] = mapped_column(Text, nullable=False)
         tags_json: Mapped[str] = mapped_column(Text, nullable=False)
         specs_json: Mapped[str] = mapped_column(Text, nullable=False)
         official_url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -46,6 +47,7 @@ else:
         question: Mapped[str] = mapped_column(Text, nullable=False)
         answer: Mapped[str] = mapped_column(Text, nullable=False)
         source_label: Mapped[str] = mapped_column(Text, nullable=False)
+        question_aliases_json: Mapped[str] = mapped_column(Text, nullable=False)
         keywords_json: Mapped[str] = mapped_column(Text, nullable=False)
         body: Mapped[str] = mapped_column(Text, nullable=False)
 

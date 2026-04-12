@@ -15,6 +15,14 @@ export type ProductListResponse = {
   items: Product[];
 };
 
+export type ProductImportResponse = {
+  mode: string;
+  imported_count: number;
+  created_count: number;
+  updated_count: number;
+  backend: string;
+};
+
 export type ProductDeleteResponse = {
   deleted: boolean;
   product_id: string;

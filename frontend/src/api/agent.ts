@@ -13,6 +13,7 @@ import type {
   AgentToolCallResponse,
   AgentToolStatusResponse,
 } from "./contracts/agent";
+import { buildAdminAccessHeaders } from "../auth/adminAccess";
 import { requestJson } from "./client";
 import { mapFaqAskResponse } from "./faq";
 import type {
@@ -226,7 +227,9 @@ function mapAgentResultFromResponse(
 
 
 export async function fetchAgentPrecheck(): Promise<AgentPrecheck> {
-  const response = await requestJson<AgentPrecheckResponse>("/agent/precheck");
+  const response = await requestJson<AgentPrecheckResponse>("/agent/precheck", {
+    headers: buildAdminAccessHeaders(),
+  });
 
   return {
     status: response.status,
@@ -237,6 +240,10 @@ export async function fetchAgentPrecheck(): Promise<AgentPrecheck> {
     openaiSdkAvailable: response.openai_sdk_available,
     langgraphAvailable: response.langgraph_available,
     dataBackend: response.data_backend,
+    databaseConfiguredBackend: response.database_configured_backend,
+    databaseRuntimeStatus: response.database_runtime_status,
+    databaseRuntimeMessage: response.database_runtime_message,
+    databasePersistenceEnabled: response.database_persistence_enabled,
     agentLogBackend: response.agent_log_backend,
     catalogTotal: response.catalog_total,
     warnings: response.warnings,

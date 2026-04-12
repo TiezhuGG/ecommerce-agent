@@ -4,6 +4,7 @@ export type FaqEntryResponse = {
   question: string;
   answer: string;
   source_label: string;
+  question_aliases: string[];
   keywords: string[];
   body: string;
 };
@@ -16,6 +17,13 @@ export type FaqCitationResponse = {
   score: number;
 };
 
+export type FaqMatchSignalResponse = {
+  kind: string;
+  label: string;
+  matched_value: string;
+  detail: string;
+};
+
 export type FaqAskResponse = {
   question: string;
   answer: string;
@@ -23,6 +31,7 @@ export type FaqAskResponse = {
   source_label: string;
   suggestions: string[];
   citations: FaqCitationResponse[];
+  match_signals: FaqMatchSignalResponse[];
   retrieval_mode: string;
   retrieval_provider: string;
   answer_provider: string;

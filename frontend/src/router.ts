@@ -1,20 +1,10 @@
 import { createRouter, createWebHistory } from "vue-router";
 
+import { showDevPanels } from "./config/runtime";
 import AdminWorkspaceView from "./views/AdminWorkspaceView.vue";
 import ShopWorkbenchView from "./views/ShopWorkbenchView.vue";
 
 type AdminSection = "system" | "knowledge" | "catalog";
-
-const devPanelsOverride = String(import.meta.env.VITE_SHOW_DEV_PANELS ?? "")
-  .trim()
-  .toLowerCase();
-
-const showDevPanels =
-  devPanelsOverride === "true"
-    ? true
-    : devPanelsOverride === "false"
-      ? false
-      : import.meta.env.DEV;
 
 const router = createRouter({
   history: createWebHistory(),

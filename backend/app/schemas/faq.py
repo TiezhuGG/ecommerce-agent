@@ -2,39 +2,45 @@ from pydantic import BaseModel, Field
 
 
 class FaqEntry(BaseModel):
-    """知识库文档模型。
+    """Searchable knowledge-base entry."""
 
-    这里虽然还沿用 faq 命名，但语义已经从“固定问答”升级成“可检索的知识文档”。
-    这样做的好处是：不用推翻已有接口，就能把 FAQ 工具逐步演进成知识库工具。
-    """
-
-    id: str = Field(..., description="知识文档唯一标识")
-    topic: str = Field(..., description="所属主题")
-    question: str = Field(..., description="文档的标准问题标题")
-    answer: str = Field(..., description="文档的标准短答案")
-    source_label: str = Field(..., description="来源标签")
-    keywords: list[str] = Field(default_factory=list, description="检索关键词")
-    body: str = Field(default="", description="更完整的知识正文，用于切分检索片段")
+    id: str = Field(..., description="Knowledge entry ID")
+    topic: str = Field(..., description="Knowledge topic")
+    question: str = Field(..., description="Canonical question title")
+    answer: str = Field(..., description="Canonical short answer")
+    source_label: str = Field(..., description="Source label")
+    question_aliases: list[str] = Field(default_factory=list, description="Alternative question phrasings")
+    keywords: list[str] = Field(default_factory=list, description="Search keywords")
+    body: str = Field(default="", description="Extended knowledge body")
 
 
 class FaqCitation(BaseModel):
-    """知识库命中的引用片段。"""
+    """Matched citation snippet."""
 
-    entry_id: str = Field(..., description="命中的知识文档 ID")
-    title: str = Field(..., description="命中文档标题")
-    snippet: str = Field(..., description="命中的片段摘要")
-    source_label: str = Field(..., description="片段来源标签")
-    score: float = Field(..., description="本地检索得分")
+    entry_id: str = Field(..., description="Matched entry ID")
+    title: str = Field(..., description="Matched entry title")
+    snippet: str = Field(..., description="Matched snippet")
+    source_label: str = Field(..., description="Snippet source label")
+    score: float = Field(..., description="Retrieval score")
+
+
+class FaqMatchSignal(BaseModel):
+    """Why a FAQ entry matched the user question."""
+
+    kind: str = Field(..., description="Match factor kind")
+    label: str = Field(..., description="Human-readable label")
+    matched_value: str = Field(..., description="Matched value from the knowledge base")
+    detail: str = Field(default="", description="Additional explanation detail")
 
 
 class FaqAskRequest(BaseModel):
-    """知识库查询请求。"""
+    """Knowledge-base ask request."""
 
-    question: str = Field(..., min_length=1, description="用户输入的售前问题")
+    question: str = Field(..., min_length=1, description="User question")
 
 
 class FaqAskResponse(BaseModel):
-    """知识库查询响应。"""
+    """Knowledge-base ask response."""
 
     question: str
     answer: str
@@ -42,57 +48,60 @@ class FaqAskResponse(BaseModel):
     source_label: str
     suggestions: list[str]
     citations: list[FaqCitation] = Field(default_factory=list)
+    match_signals: list[FaqMatchSignal] = Field(default_factory=list)
     retrieval_mode: str = Field(default="knowledge-rag-v1")
     retrieval_provider: str = Field(default="knowledge-rag-v1-local-retrieval")
     answer_provider: str = Field(default="")
 
 
 class FaqEntryListResponse(BaseModel):
-    """知识库条目列表。"""
+    """Knowledge-base admin list response."""
 
     backend: str
     items: list[FaqEntry] = Field(default_factory=list)
 
 
 class FaqEntryUpsertRequest(BaseModel):
-    """知识库条目新增/更新请求。"""
+    """Create or update knowledge entry payload."""
 
-    topic: str = Field(..., min_length=1, description="所属主题")
-    question: str = Field(..., min_length=1, description="标准问题标题")
-    answer: str = Field(..., min_length=1, description="标准短答案")
-    source_label: str = Field(..., min_length=1, description="来源标签")
-    keywords: list[str] = Field(default_factory=list, description="检索关键词")
-    body: str = Field(default="", description="知识正文")
+    topic: str = Field(..., min_length=1, description="Knowledge topic")
+    question: str = Field(..., min_length=1, description="Canonical question title")
+    answer: str = Field(..., min_length=1, description="Canonical short answer")
+    source_label: str = Field(..., min_length=1, description="Source label")
+    question_aliases: list[str] = Field(default_factory=list, description="Alternative question phrasings")
+    keywords: list[str] = Field(default_factory=list, description="Search keywords")
+    body: str = Field(default="", description="Extended knowledge body")
 
 
 class FaqDeleteResponse(BaseModel):
-    """知识库条目删除响应。"""
+    """Knowledge-base delete response."""
 
     deleted: bool = True
     entry_id: str
 
 
 class FaqEntryImportItem(BaseModel):
-    """导入用知识库条目。"""
+    """Knowledge entry payload used by bulk import."""
 
-    id: str | None = Field(default=None, description="知识文档 ID，可为空")
-    topic: str = Field(..., min_length=1, description="所属主题")
-    question: str = Field(..., min_length=1, description="标准问题标题")
-    answer: str = Field(..., min_length=1, description="标准短答案")
-    source_label: str = Field(..., min_length=1, description="来源标签")
-    keywords: list[str] = Field(default_factory=list, description="检索关键词")
-    body: str = Field(default="", description="知识正文")
+    id: str | None = Field(default=None, description="Knowledge entry ID, optional")
+    topic: str = Field(..., min_length=1, description="Knowledge topic")
+    question: str = Field(..., min_length=1, description="Canonical question title")
+    answer: str = Field(..., min_length=1, description="Canonical short answer")
+    source_label: str = Field(..., min_length=1, description="Source label")
+    question_aliases: list[str] = Field(default_factory=list, description="Alternative question phrasings")
+    keywords: list[str] = Field(default_factory=list, description="Search keywords")
+    body: str = Field(default="", description="Extended knowledge body")
 
 
 class FaqEntryImportRequest(BaseModel):
-    """知识库导入请求。"""
+    """Knowledge-base bulk import request."""
 
-    mode: str = Field(default="upsert", description="支持 upsert 或 replace")
-    items: list[FaqEntryImportItem] = Field(default_factory=list, description="待导入条目")
+    mode: str = Field(default="upsert", description="Supported values: upsert, replace")
+    items: list[FaqEntryImportItem] = Field(default_factory=list, description="Entries to import")
 
 
 class FaqEntryImportResponse(BaseModel):
-    """知识库导入响应。"""
+    """Knowledge-base bulk import result."""
 
     mode: str
     imported_count: int

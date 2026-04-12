@@ -7,6 +7,7 @@ export type Product = {
   price_note: string;
   summary: string;
   scenario: string;
+  aliases: string[];
   tags: string[];
   specs: string[];
   official_url: string;
@@ -20,6 +21,7 @@ export type ProductInput = {
   price_note: string;
   summary: string;
   scenario: string;
+  aliases: string[];
   tags: string[];
   specs: string[];
   official_url: string;
@@ -28,6 +30,16 @@ export type ProductInput = {
 export type ProductCatalogAdminResult = {
   backend: string;
   items: Product[];
+};
+
+export type ProductImportMode = "upsert" | "replace";
+
+export type ProductImportResult = {
+  mode: ProductImportMode;
+  importedCount: number;
+  createdCount: number;
+  updatedCount: number;
+  backend: string;
 };
 
 export type SearchFilters = {

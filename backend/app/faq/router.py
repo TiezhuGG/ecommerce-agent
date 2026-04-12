@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.admin.security import require_admin_access
 from app.faq.service import (
     FaqAdminUnavailableError,
     FaqImportValidationError,
@@ -34,7 +35,7 @@ async def ask_faq_endpoint(payload: FaqAskRequest) -> FaqAskResponse:
 
 
 @router.get("/entries", response_model=FaqEntryListResponse)
-async def list_faq_entries_endpoint() -> FaqEntryListResponse:
+async def list_faq_entries_endpoint(_: None = Depends(require_admin_access)) -> FaqEntryListResponse:
     """知识库条目列表。"""
 
     try:
@@ -44,7 +45,7 @@ async def list_faq_entries_endpoint() -> FaqEntryListResponse:
 
 
 @router.get("/entries/export", response_model=FaqEntryListResponse)
-async def export_faq_entries_endpoint() -> FaqEntryListResponse:
+async def export_faq_entries_endpoint(_: None = Depends(require_admin_access)) -> FaqEntryListResponse:
     """导出知识库条目。"""
 
     try:
@@ -54,7 +55,10 @@ async def export_faq_entries_endpoint() -> FaqEntryListResponse:
 
 
 @router.post("/entries/import", response_model=FaqEntryImportResponse)
-async def import_faq_entries_endpoint(payload: FaqEntryImportRequest) -> FaqEntryImportResponse:
+async def import_faq_entries_endpoint(
+    payload: FaqEntryImportRequest,
+    _: None = Depends(require_admin_access),
+) -> FaqEntryImportResponse:
     """导入知识库条目。"""
 
     try:
@@ -66,7 +70,10 @@ async def import_faq_entries_endpoint(payload: FaqEntryImportRequest) -> FaqEntr
 
 
 @router.post("/entries", response_model=FaqEntry)
-async def create_faq_entry_endpoint(payload: FaqEntryUpsertRequest) -> FaqEntry:
+async def create_faq_entry_endpoint(
+    payload: FaqEntryUpsertRequest,
+    _: None = Depends(require_admin_access),
+) -> FaqEntry:
     """新增知识库条目。"""
 
     try:
@@ -76,7 +83,11 @@ async def create_faq_entry_endpoint(payload: FaqEntryUpsertRequest) -> FaqEntry:
 
 
 @router.put("/entries/{entry_id}", response_model=FaqEntry)
-async def update_faq_entry_endpoint(entry_id: str, payload: FaqEntryUpsertRequest) -> FaqEntry:
+async def update_faq_entry_endpoint(
+    entry_id: str,
+    payload: FaqEntryUpsertRequest,
+    _: None = Depends(require_admin_access),
+) -> FaqEntry:
     """更新知识库条目。"""
 
     try:
@@ -88,7 +99,10 @@ async def update_faq_entry_endpoint(entry_id: str, payload: FaqEntryUpsertReques
 
 
 @router.delete("/entries/{entry_id}", response_model=FaqDeleteResponse)
-async def delete_faq_entry_endpoint(entry_id: str) -> FaqDeleteResponse:
+async def delete_faq_entry_endpoint(
+    entry_id: str,
+    _: None = Depends(require_admin_access),
+) -> FaqDeleteResponse:
     """删除知识库条目。"""
 
     try:

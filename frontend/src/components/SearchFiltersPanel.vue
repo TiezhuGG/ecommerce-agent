@@ -22,11 +22,14 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
 
 <template>
   <section class="panel p-6">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h2 class="panel-title">先缩小商品范围</h2>
-        <p class="muted-copy mt-2">
-          如果你已经知道预算、品类或品牌，先在这里筛一轮。右侧 AI 会直接复用这些条件继续推荐。
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div class="max-w-3xl">
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-700">
+          Search Filters
+        </p>
+        <h2 class="mt-3 text-2xl font-semibold text-ink">先缩小商品范围</h2>
+        <p class="mt-3 text-sm leading-7 text-slate-600">
+          如果你已经知道大致预算、分类或品牌，可以先在这里缩一轮范围。右侧 AI 推荐和下方商品结果都会直接复用这些条件。
         </p>
       </div>
 
@@ -41,7 +44,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
 
     <div class="mt-5 flex flex-wrap gap-2">
       <span class="chip bg-slate-100 text-slate-700">支持关键词、分类、品牌、预算</span>
-      <span class="chip bg-amber-100 text-amber-800">修改后会自动刷新商品列表</span>
+      <span class="chip bg-amber-100 text-amber-800">修改后会自动刷新商品结果</span>
     </div>
 
     <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -51,7 +54,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
           :value="filters.keyword"
           type="text"
           class="field-input"
-          placeholder="例如：降噪耳机、4K 显示器、移动 SSD"
+          placeholder="例如: 降噪耳机, 4K 显示器, 移动 SSD"
           @input="updateField('keyword', ($event.target as HTMLInputElement).value)"
         />
       </label>
@@ -91,7 +94,7 @@ function updateField<K extends keyof SearchFilters>(field: K, value: SearchFilte
           type="number"
           min="0"
           class="field-input"
-          placeholder="例如：2500"
+          placeholder="例如: 1500"
           @input="
             updateField(
               'maxPrice',

@@ -1,16 +1,22 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.admin.security import require_admin_access
 from app.catalog.service import (
     ProductAdminUnavailableError,
+    ProductImportValidationError,
     ProductNotFoundError,
     create_product,
     delete_product,
+    export_products,
+    import_products,
     list_products_admin,
     search_products,
     update_product,
 )
 from app.schemas.products import (
     ProductDeleteResponse,
+    ProductImportRequest,
+    ProductImportResponse,
     ProductListResponse,
     ProductSearchResponse,
     ProductSummary,
@@ -38,7 +44,7 @@ async def get_products(
 
 
 @router.get("/admin", response_model=ProductListResponse)
-async def list_products_admin_endpoint() -> ProductListResponse:
+async def list_products_admin_endpoint(_: None = Depends(require_admin_access)) -> ProductListResponse:
     """Product admin list endpoint."""
 
     try:
@@ -47,8 +53,36 @@ async def list_products_admin_endpoint() -> ProductListResponse:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/admin/export", response_model=ProductListResponse)
+async def export_products_endpoint(_: None = Depends(require_admin_access)) -> ProductListResponse:
+    """Product admin export endpoint."""
+
+    try:
+        return export_products()
+    except ProductAdminUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/admin/import", response_model=ProductImportResponse)
+async def import_products_endpoint(
+    payload: ProductImportRequest,
+    _: None = Depends(require_admin_access),
+) -> ProductImportResponse:
+    """Product admin import endpoint."""
+
+    try:
+        return import_products(payload)
+    except ProductImportValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ProductAdminUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.post("/admin", response_model=ProductSummary)
-async def create_product_endpoint(payload: ProductUpsertRequest) -> ProductSummary:
+async def create_product_endpoint(
+    payload: ProductUpsertRequest,
+    _: None = Depends(require_admin_access),
+) -> ProductSummary:
     """Product create endpoint."""
 
     try:
@@ -58,7 +92,11 @@ async def create_product_endpoint(payload: ProductUpsertRequest) -> ProductSumma
 
 
 @router.put("/admin/{product_id}", response_model=ProductSummary)
-async def update_product_endpoint(product_id: str, payload: ProductUpsertRequest) -> ProductSummary:
+async def update_product_endpoint(
+    product_id: str,
+    payload: ProductUpsertRequest,
+    _: None = Depends(require_admin_access),
+) -> ProductSummary:
     """Product update endpoint."""
 
     try:
@@ -70,7 +108,10 @@ async def update_product_endpoint(product_id: str, payload: ProductUpsertRequest
 
 
 @router.delete("/admin/{product_id}", response_model=ProductDeleteResponse)
-async def delete_product_endpoint(product_id: str) -> ProductDeleteResponse:
+async def delete_product_endpoint(
+    product_id: str,
+    _: None = Depends(require_admin_access),
+) -> ProductDeleteResponse:
     """Product delete endpoint."""
 
     try:

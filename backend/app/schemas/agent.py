@@ -26,6 +26,10 @@ class AgentPrecheckResponse(BaseModel):
     openai_sdk_available: bool
     langgraph_available: bool
     data_backend: str
+    database_configured_backend: str
+    database_runtime_status: str
+    database_runtime_message: str
+    database_persistence_enabled: bool
     agent_log_backend: str
     catalog_total: int
     warnings: list[str]

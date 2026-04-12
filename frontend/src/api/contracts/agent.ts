@@ -18,6 +18,10 @@ export type AgentPrecheckResponse = {
   openai_sdk_available: boolean;
   langgraph_available: boolean;
   data_backend: string;
+  database_configured_backend: string;
+  database_runtime_status: string;
+  database_runtime_message: string;
+  database_persistence_enabled: boolean;
   agent_log_backend: string;
   catalog_total: number;
   warnings: string[];
